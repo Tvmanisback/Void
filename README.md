@@ -7,17 +7,21 @@ A fully functional web-based operating system running entirely in your browser.
 ## Features
 
 - Complete desktop environment (windows, taskbar, start menu, desktop icons)
-- **Void Browser** – Real proxy-powered browser (not an embed)
-- **VoidCode** – VSCode-style code editor powered by Monaco
+- **SVG icons** for every app
+- **Void Browser** – Real proxy-powered browser (corsproxy.io)
+- **VoidCode** – VS Code-style editor with activity bar, sidebar, tabs, status bar (Monaco)
+- **Terminal** – Interactive command line
+- **Files** – Local file manager
+- **Notes** – Notes app with localStorage
+- **TycoreStore** – App store
+- Clock format: `DD/MM/YYYY` + `HH:MM`
 - Draggable / resizable windows
-- Dark "void" theme
-- Clock, system tray, and settings
+- Dark void theme
 
 ## Notes
 
-This is a client-side OS simulation. The browser uses public CORS proxies to fetch pages. Complex modern sites may not render perfectly due to how proxies handle relative assets, CSP, and scripts.
-
-Schools that block `*.github.io` will of course block this site too.
+Everything runs client-side. Notes and files are stored in localStorage.
+A real backend (Supabase) can be added later for cloud sync.
 
 ## Tech
 
