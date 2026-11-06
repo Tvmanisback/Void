@@ -1,7 +1,7 @@
 // Void OS Supabase configuration
-// Add your Supabase Project URL and anon/public key here.
-// Never place a service_role key in browser code.
+// The publishable key is intended for browser use.
+// Never put a service_role or secret key in this file.
 window.VOID_SUPABASE_CONFIG = {
-  url: '',
-  anonKey: ''
+  url: 'https://osnwiabyzjzfgduftorl.supabase.co',
+  anonKey: 'sb_publishable_YHRJdB5OLFFidJuT8o64RA_0cXaT1MA'
 };
