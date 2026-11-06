@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Void OS</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="boot-screen">
+    <div class="boot-logo">
+      <svg viewBox="0 0 64 64" width="72" height="72">
+        <circle cx="32" cy="32" r="22" fill="url(#bootg)"/>
+        <circle cx="32" cy="32" r="9" fill="#0b0b12"/>
+        <circle cx="32" cy="32" r="3.5" fill="#c4b5fd"/>
+        <defs>
+          <radialGradient id="bootg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#a78bfa"/>
+            <stop offset="55%" stop-color="#6d28d9"/>
+            <stop offset="100%" stop-color="#0f0a1a"/>
+          </radialGradient>
+        </defs>
+      </svg>
+      <div class="boot-title">Void OS</div>
+      <div class="boot-bar"><div class="boot-progress"></div></div>
+    </div>
+  </div>
+
+  <div id="desktop" class="hidden">
+    <div id="desktop-icons"></div>
+
+    <div id="windows-container"></div>
+
+    <!-- Start Menu -->
+    <div id="start-menu" class="hidden">
+      <div class="start-header">
+        <div class="start-user">
+          <div class="avatar">V</div>
+          <div>
+            <div class="start-name">Void User</div>
+            <div class="start-sub">Void OS</div>
+          </div>
+        </div>
+      </div>
+      <div class="start-apps" id="start-apps"></div>
+      <div class="start-footer">
+        <button id="power-btn" title="Reset session">⏻</button>
+      </div>
+    </div>
+
+    <!-- Taskbar -->
+    <div id="taskbar">
+      <button id="start-btn" title="Start">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
+        </svg>
+      </button>
+      <div id="taskbar-apps"></div>
+      <div id="taskbar-right">
+        <div id="tray"></div>
+        <div id="clock"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
