@@ -39,84 +39,23 @@ const LS = {
 
 const isMobile = () => window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-// Fill these in when the Supabase project is created.
-// Only use the Project URL and anon/public key. Never use a service-role key.
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
-let supabaseClient = null;
-
 function initAuth(){
-  const authScreen=document.getElementById('auth-screen');
-  const desktop=document.getElementById('desktop');
-  const form=document.getElementById('auth-form');
-  const signInTab=document.getElementById('auth-signin-tab');
-  const signUpTab=document.getElementById('auth-signup-tab');
-  const nameWrap=document.getElementById('auth-name-wrap');
-  const message=document.getElementById('auth-message');
-  const submit=document.getElementById('auth-submit');
-  if(!authScreen||!form) throw new Error('Authentication screen is missing');
-  const configured=Boolean(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.supabase?.createClient);
-  if(configured){
-    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-    document.getElementById('auth-connection').innerHTML='<span class="connected"></span> Connected to Supabase';
-  }
-  let mode='signin';
-  function setMode(next){
-    mode=next;
-    const signup=mode==='signup';
-    signInTab.classList.toggle('active',!signup);
-    signUpTab.classList.toggle('active',signup);
-    nameWrap.hidden=!signup;
-    document.getElementById('auth-title').textContent=signup?'Create your account.':'Welcome back.';
-    document.getElementById('auth-description').textContent=signup?'Set up your account to enter Void OS.':'Sign in to continue to your desktop.';
-    document.getElementById('auth-password').autocomplete=signup?'new-password':'current-password';
-    submit.textContent=signup?'Create account':'Sign in';
-    message.textContent='';message.className='auth-message';
-  }
-  signInTab.addEventListener('click',()=>setMode('signin'));
-  signUpTab.addEventListener('click',()=>setMode('signup'));
-  async function enterDesktop(user){
-    authScreen.classList.add('hidden');desktop.classList.remove('hidden');
+  window.VoidAuth.init(user=>{
+    const authScreen=document.getElementById('auth-screen');
+    const desktop=document.getElementById('desktop');
+    authScreen.classList.add('hidden');
+    desktop.classList.remove('hidden');
     const name=user.user_metadata?.display_name||user.email?.split('@')[0]||'Void User';
     document.querySelector('.start-name').textContent=name;
     document.querySelector('.start-sub').textContent=user.email||'Signed in';
     document.querySelector('.avatar').textContent=name.charAt(0).toUpperCase();
     initDesktop();initStartMenu();startClock();
     if(!isMobile()) openApp('about');
-  }
-  form.addEventListener('submit',async e=>{
-    e.preventDefault();
-    if(!supabaseClient){
-      message.textContent='Supabase is not connected yet. Add your project URL and anon key in app.js when you have them.';
-      message.className='auth-message error';return;
-    }
-    const email=document.getElementById('auth-email').value.trim();
-    const password=document.getElementById('auth-password').value;
-    const displayName=document.getElementById('auth-name').value.trim();
-    submit.disabled=true;submit.textContent=mode==='signup'?'Creating account…':'Signing in…';message.textContent='';
-    try{
-      const result=mode==='signup'
-        ? await supabaseClient.auth.signUp({email,password,options:{data:{display_name:displayName||email.split('@')[0]}}})
-        : await supabaseClient.auth.signInWithPassword({email,password});
-      if(result.error) throw result.error;
-      if(mode==='signup'&&!result.data.session){
-        message.textContent='Account created. Check your email to confirm it, then sign in.';
-        message.className='auth-message success';
-      }else if(result.data.user){await enterDesktop(result.data.user);}
-    }catch(error){message.textContent=error.message||'Authentication failed. Please try again.';message.className='auth-message error';}
-    finally{submit.disabled=false;submit.textContent=mode==='signup'?'Create account':'Sign in';}
   });
-  if(supabaseClient){
-    supabaseClient.auth.getSession().then(({data,error})=>{
-      if(error) console.error('Session restore failed:',error);
-      if(data?.session?.user) enterDesktop(data.session.user);
-      else authScreen.classList.remove('hidden');
-    }).catch(error=>{console.error(error);authScreen.classList.remove('hidden');});
-  }else authScreen.classList.remove('hidden');
 }
 
-async function signOutVoid(){
-  if(supabaseClient) await supabaseClient.auth.signOut();
+function signOutVoid(){
+  window.VoidAuth.signOut();
   document.getElementById('desktop').classList.add('hidden');
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('auth-form').reset();
