@@ -2,13 +2,11 @@
 (() => {
   'use strict';
 
-  // ---------- State ----------
   let zCounter = 20;
   const openWindows = new Map();
   let activeId = null;
   const monacoEditors = new Map();
 
-  // ---------- Apps Registry ----------
   const APPS = [
     {
       id: 'browser',
@@ -48,10 +46,9 @@
     }
   ];
 
-  // Force correct icons
+  // Correct icon
   APPS[1].icon = ' enthralled';
 
-  // ---------- Boot ----------
   window.addEventListener('DOMContentLoaded', () => {
     APPS[1].icon = ' enthralled';
 
@@ -106,10 +103,8 @@
   }
 
   function toggleStartMenu() {
-    const menu = document.getElementById('start-menu');
-    const btn = document.getElementById('start-btn');
-    menu.classList.toggle('hidden');
-    btn.classList.toggle('active');
+    document.getElementById('start-menu').classList.toggle('hidden');
+    document.getElementById('start-btn').classList.toggle('active');
   }
   function closeStartMenu() {
     document.getElementById('start-menu').classList.add('hidden');
@@ -183,8 +178,7 @@
       <div class="resize-handle sw"></div>
     `;
 
-    const body = el.querySelector('.window-body');
-    app.create(body, id);
+    app.create(el.querySelector('.window-body'), id);
 
     el.querySelector('.close').addEventListener('click', () => closeWindow(id));
     el.querySelector('.min').addEventListener('click', () => {
@@ -290,8 +284,6 @@
     tick();
     setInterval(tick, 15000);
   }
-
-  // ==================== APPS ====================
 
   const PROXIES = [
     { name: 'corsproxy.io', build: (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
