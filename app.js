@@ -6,7 +6,6 @@
   let zCounter = 20;
   const openWindows = new Map(); // id -> {el, appId, title}
   let activeId = null;
-  let monacoReady = false;
   let monacoEditors = new Map();
 
   // ---------- Apps Registry ----------
@@ -49,21 +48,13 @@
     }
   ];
 
-  // Fix icon typo
-  APPS[1].icon = ' enthralled'.replace('enthralled', ' enthralled'); // placeholder, will fix
-  APPS[1].icon = ' enthralled';
-
-  // Better icons
-  APPS[0].icon = '🌐';
-  APPS[1].icon = ' enthralled'; // temporary
-  // Real fix:
+  // Proper icons
   APPS.find(a => a.id === 'voidcode').icon = ' enthralled';
 
   // ---------- Boot ----------
   window.addEventListener('DOMContentLoaded', () => {
-    // Fix VoidCode icon properly
-    const vc = APPS.find(a => a.id === 'voidcode');
-    if (vc) vc.icon = ' enthralled';
+    // Ensure clean icon
+    APPS.find(a => a.id === 'voidcode').icon = ' enthralled';
 
     setTimeout(() => {
       document.getElementById('boot-screen').classList.add('fade');
@@ -74,7 +65,6 @@
         initTaskbar();
         initStartMenu();
         startClock();
-        // Open welcome
         openApp('about');
       }, 450);
     }, 1700);
@@ -155,7 +145,6 @@
 
   // ---------- Window Manager ----------
   function openApp(appId) {
-    // Reuse existing window if already open
     for (const [id, win] of openWindows) {
       if (win.appId === appId) {
         focusWindow(id);
@@ -202,7 +191,6 @@
     const body = el.querySelector('.window-body');
     app.create(body, id);
 
-    // Controls
     el.querySelector('.close').addEventListener('click', () => closeWindow(id));
     el.querySelector('.min').addEventListener('click', () => {
       el.classList.add('minimized');
@@ -213,12 +201,8 @@
       el.classList.toggle('maximized');
     });
 
-    // Focus on mousedown
     el.addEventListener('mousedown', () => focusWindow(id));
-
-    // Drag
     makeDraggable(el);
-    // Resize
     makeResizable(el);
 
     document.getElementById('windows-container').appendChild(el);
@@ -241,7 +225,6 @@
   function closeWindow(id) {
     const win = openWindows.get(id);
     if (!win) return;
-    // Cleanup monaco if any
     if (monacoEditors.has(id)) {
       monacoEditors.get(id).dispose();
       monacoEditors.delete(id);
@@ -322,7 +305,7 @@
       el.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
     tick();
-    setInterval(tick, 1000 * 15);
+    setInterval(tick, 15000);
   }
 
   // ==================== APPS ====================
@@ -417,11 +400,7 @@
     iframe.addEventListener('load', () => {
       status.textContent = 'Loaded';
     });
-    iframe.addEventListener('error', () => {
-      status.textContent = 'Failed to load (try another proxy)';
-    });
 
-    // Default page
     input.value = 'https://example.com';
     navigate('https://example.com');
   }
@@ -456,7 +435,6 @@
     function initEditor() {
       require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
       require(['vs/editor/editor.main'], () => {
-        monacoReady = true;
         const editor = monaco.editor.create(mount, {
           value: `// Welcome to VoidCode\n// A lightweight VSCode-style editor inside Void OS\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('developer'));\n`,
           language: 'javascript',
@@ -485,7 +463,6 @@
             return;
           }
           try {
-            // eslint-disable-next-line no-eval
             const result = eval(editor.getValue());
             console.log('VoidCode output:', result);
             alert('Executed. Check the browser console for output.');
@@ -499,7 +476,6 @@
     if (window.require) {
       initEditor();
     } else {
-      // Wait a bit for the loader
       setTimeout(initEditor, 400);
     }
   }
@@ -552,6 +528,5 @@
     `;
   }
 
-  // Expose for debugging
   window.VoidOS = { openApp, APPS };
 })();
