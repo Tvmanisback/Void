@@ -3,15 +3,22 @@
 'use strict';
 
 const ICONS = {
-browser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>`,
-voidcode: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6M13 4l-2 16"/></svg>`,
-terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>`,
-files: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z"/></svg>`,
-notes: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 4h9a2 2 0 0 1 2 2v14l-4-2-4 2V6a2 2 0 0 1 2-2z"/><path d="M8 4a2 2 0 0 0-2 2v12"/></svg>`,
-store: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9h16l-1.5 10H5.5L4 9z"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/></svg>`,
-settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
-about: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M12 12v4"/></svg>`
+  browser: 'icons/browser.svg',
+  voidcode: 'icons/voidcode.svg',
+  terminal: 'icons/terminal.svg',
+  files: 'icons/files.svg',
+  notes: 'icons/notes.svg',
+  store: 'icons/store.svg',
+  settings: 'icons/settings.svg',
+  about: 'icons/about.svg'
 };
+
+function iconImg(src) {
+  return `<img src="${src}" width="26" height="26" alt="" draggable="false">`;
+}
+function iconImgSmall(src) {
+  return `<img src="${src}" width="18" height="18" alt="" draggable="false">`;
+}
 
 let zCounter = 20;
 const openWindows = new Map();
@@ -29,7 +36,6 @@ const APPS = [
   { id:'about', name:'About Void', icon:ICONS.about, desktop:false, width:440, height:380, create:createAbout }
 ];
 
-// localStorage helpers
 const LS = {
   get(k, d){ try{ return JSON.parse(localStorage.getItem('void_'+k)) ?? d }catch{ return d } },
   set(k, v){ localStorage.setItem('void_'+k, JSON.stringify(v)) }
@@ -55,7 +61,7 @@ function initDesktop(){
   APPS.filter(a=>a.desktop).forEach(app=>{
     const el = document.createElement('div');
     el.className = 'desktop-icon';
-    el.innerHTML = `<div class="icon-img">${app.icon}</div><span>${app.name}</span>`;
+    el.innerHTML = `<div class="icon-img">${iconImg(app.icon)}</div><span>${app.name}</span>`;
     el.addEventListener('dblclick', ()=>openApp(app.id));
     c.appendChild(el);
   });
@@ -67,7 +73,7 @@ function initStartMenu(){
   APPS.forEach(app=>{
     const btn = document.createElement('button');
     btn.className = 'start-app';
-    btn.innerHTML = `<div class="app-icon">${app.icon}</div><span>${app.name}</span>`;
+    btn.innerHTML = `<div class="app-icon">${iconImgSmall(app.icon)}</div><span>${app.name}</span>`;
     btn.onclick = ()=>{ openApp(app.id); closeStartMenu(); };
     list.appendChild(btn);
   });
@@ -119,7 +125,7 @@ function openApp(appId){
   el.style.top = Math.max(30,(innerHeight-h-60)/2+(openWindows.size*20)%80)+'px';
   el.innerHTML = `
     <div class="titlebar">
-      <div class="title">${app.icon}<span>${app.name}</span></div>
+      <div class="title">${iconImgSmall(app.icon)}<span>${app.name}</span></div>
       <div class="controls">
         <button class="ctrl min">─</button>
         <button class="ctrl max">□</button>
@@ -201,7 +207,6 @@ function startClock(){
   tick(); setInterval(tick,10000);
 }
 
-// ===== Browser (locked proxy) =====
 const PROXY_KEY='1ec6a957';
 function buildProxyUrl(t){ return `https://corsproxy.io/?key=${PROXY_KEY}&url=${encodeURIComponent(t)}`; }
 
@@ -235,7 +240,6 @@ function createBrowser(container){
   input.value='https://example.com'; nav('https://example.com');
 }
 
-// ===== VoidCode (VS Code style) =====
 function createVoidCode(container, winId){
   container.innerHTML=`<div class="vscode">
     <div class="vscode-activity">
@@ -273,7 +277,6 @@ function createVoidCode(container, winId){
   if(window.require) init(); else setTimeout(init,400);
 }
 
-// ===== Terminal =====
 function createTerminal(container){
   container.innerHTML=`<div class="terminal">
     <div class="terminal-output" id="term-out"></div>
@@ -307,7 +310,6 @@ function createTerminal(container){
   setTimeout(()=>input.focus(),100);
 }
 
-// ===== File Manager =====
 function createFiles(container){
   let files=LS.get('files',[{
     name:'Welcome.txt', type:'file', content:'Welcome to Void OS Files!\nThis is a simple local file system.'
@@ -328,7 +330,7 @@ function createFiles(container){
   const list=container.querySelector('#fm-list');
   function render(){
     list.innerHTML='';
-    files.forEach((f,i)=>{
+    files.forEach((f)=>{
       const el=document.createElement('div');
       el.className='fm-item';
       el.innerHTML=`<div class="icon">${f.type==='folder'?'📁':'📄'}</div><span>${f.name}</span>`;
@@ -348,7 +350,6 @@ function createFiles(container){
   render();
 }
 
-// ===== Notes =====
 function createNotes(container){
   let notes=LS.get('notes',[{id:1,title:'Welcome',body:'This is your first note in Void OS.\n\nNotes are saved locally in your browser.'}]);
   let current=notes[0]?.id||null;
@@ -389,7 +390,6 @@ function createNotes(container){
   renderList();
 }
 
-// ===== TycoreStore =====
 function createStore(container){
   const catalog=[
     {id:'browser',name:'Void Browser',desc:'Real proxy-powered browser',icon:ICONS.browser},
@@ -407,7 +407,7 @@ function createStore(container){
   catalog.forEach(app=>{
     const card=document.createElement('div');
     card.className='store-card';
-    card.innerHTML=`<div class="icon">${app.icon}</div>
+    card.innerHTML=`<div class="icon">${iconImg(app.icon)}</div>
       <div class="name">${app.name}</div>
       <div class="desc">${app.desc}</div>
       <button data-id="${app.id}">Open</button>`;
