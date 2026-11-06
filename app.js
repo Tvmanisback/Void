@@ -89,21 +89,40 @@ function initDesktop(){
 
 function initStartMenu(){
   const list = document.getElementById('start-apps');
+  const startButton = document.getElementById('start-btn');
+  const powerButton = document.getElementById('power-btn');
+  if(!list || !startButton || !powerButton) throw new Error('Start menu elements are missing');
+
   list.innerHTML = '';
   APPS.forEach(app=>{
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'start-app';
+    btn.dataset.appId = app.id;
     btn.innerHTML = `<div class="app-icon">${iconImgSmall(app.icon)}</div><span>${app.name}</span>`;
-    btn.onclick = ()=>{ openApp(app.id); closeStartMenu(); };
     list.appendChild(btn);
   });
-  document.getElementById('start-btn').onclick = toggleStartMenu;
-  document.getElementById('power-btn').onclick = ()=>location.reload();
-  document.addEventListener('click', e=>{
-    const menu = document.getElementById('start-menu');
-    const btn = document.getElementById('start-btn');
-    if(!menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) closeStartMenu();
-  });
+
+  // Use one delegated handler so app buttons keep working after the menu is rebuilt.
+  list.onclick = e=>{
+    const btn = e.target.closest('button[data-app-id]');
+    if(!btn || !list.contains(btn)) return;
+    e.preventDefault();
+    const appId = btn.dataset.appId;
+    closeStartMenu();
+    openApp(appId);
+  };
+  startButton.onclick = e=>{ e.preventDefault(); toggleStartMenu(); };
+  powerButton.onclick = ()=>location.reload();
+
+  if(!initStartMenu.outsideClickBound){
+    document.addEventListener('click', e=>{
+      const menu = document.getElementById('start-menu');
+      const start = document.getElementById('start-btn');
+      if(menu && start && !menu.classList.contains('hidden') && !menu.contains(e.target) && !start.contains(e.target)) closeStartMenu();
+    });
+    initStartMenu.outsideClickBound = true;
+  }
 }
 function toggleStartMenu(){
   document.getElementById('start-menu').classList.toggle('hidden');
@@ -168,15 +187,27 @@ function openApp(appId){
     <div class="resize-handle e"></div><div class="resize-handle w"></div>
     <div class="resize-handle ne"></div><div class="resize-handle nw"></div>
     <div class="resize-handle se"></div><div class="resize-handle sw"></div>`;
-  app.create(el.querySelector('.window-body'), id);
+  // Attach the window before initializing its app. Some app UIs (notably
+  // Monaco) need to be in the document before they can bind correctly.
+  document.getElementById('windows-container').appendChild(el);
+  openWindows.set(id,{el,appId,title:app.name});
+  try {
+    app.create(el.querySelector('.window-body'), id);
+  } catch(error) {
+    console.error('Void app failed to open:', appId, error);
+    const body = el.querySelector('.window-body');
+    body.innerHTML = '';
+    const message = document.createElement('div');
+    message.style.cssText = 'padding:20px;color:#fff;font:14px/1.5 system-ui;white-space:pre-wrap';
+    message.textContent = app.name + ' could not open: ' + (error && error.message ? error.message : String(error));
+    body.appendChild(message);
+  }
   el.querySelector('.close').onclick = ()=>closeWindow(id);
   el.querySelector('.min').onclick = ()=>{ el.classList.add('minimized'); if(activeId===id) activeId=null; updateTaskbar(); };
   el.querySelector('.max').onclick = ()=>el.classList.toggle('maximized');
   el.addEventListener('mousedown', ()=>focusWindow(id));
   el.addEventListener('touchstart', ()=>focusWindow(id), {passive:true});
   makeDraggable(el); makeResizable(el);
-  document.getElementById('windows-container').appendChild(el);
-  openWindows.set(id,{el,appId,title:app.name});
   focusWindow(id); updateTaskbar();
 }
 
