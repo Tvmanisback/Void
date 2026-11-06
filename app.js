@@ -255,7 +255,6 @@ function openApp(appId){
   el.addEventListener('pointerdown', event=>{
     const field=event.target.closest('input, textarea, select, [contenteditable="true"]');
     if(!field || !el.contains(field)) return;
-    event.stopPropagation();
     try{ field.focus({preventScroll:true}); }catch{ field.focus(); }
   }, true);
   el.addEventListener('pointerdown', event=>{
