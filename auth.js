@@ -47,9 +47,9 @@
       signUpTab.classList.toggle('active', signup);
       nameWrap.hidden = !signup;
       document.getElementById('auth-title').textContent =
-        signup ? 'Create your account.' : 'Welcome back.';
+        signup ? 'Join Void OS.' : 'Welcome back.';
       document.getElementById('auth-description').textContent =
-        signup ? 'Set up your account to enter Void OS.' : 'Sign in to continue to your desktop.';
+        signup ? 'Create an account to get started.' : 'Sign in to open your desktop.';
       document.getElementById('auth-password').autocomplete =
         signup ? 'new-password' : 'current-password';
       submit.textContent = signup ? 'Create account' : 'Sign in';
@@ -63,7 +63,7 @@
       event.preventDefault();
       const activeClient = getClient();
       if (!activeClient) {
-        showMessage('Supabase is not connected yet. Add your Project URL and anon/public key in supabase-config.js.', 'error');
+        showMessage('Sign-in is temporarily unavailable. Please try again later.', 'error');
         return;
       }
 
