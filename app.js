@@ -443,11 +443,14 @@ function createBrowser(container){
       const el = document.createElement('div');
       el.className = 'browser-tab'+(t.id===activeTab?' active':'');
       el.innerHTML = `<span class="tab-title">${t.title}</span><button class="tab-close" data-id="${t.id}">×</button>`;
-      el.onclick = (e)=>{
-        if(e.target.classList.contains('tab-close')) return;
+      bindActivation(el, (e)=>{
+        if(e.target.closest('.tab-close')) return;
         switchTab(t.id);
-      };
-      el.querySelector('.tab-close').onclick = (e)=>{ e.stopPropagation(); closeTab(t.id); };
+      });
+      bindActivation(el.querySelector('.tab-close'), (e)=>{
+        e.stopPropagation();
+        closeTab(t.id);
+      });
       tabsEl.appendChild(el);
     });
   }
@@ -497,6 +500,8 @@ function createBrowser(container){
 
   function showStartPage(){
     status.textContent = 'Start';
+    // Clear any previous proxied page before showing the fresh start page.
+    iframe.removeAttribute('src');
     iframe.srcdoc = getStartPageHTML();
   }
 
@@ -533,18 +538,19 @@ function createBrowser(container){
   }
 
   form.onsubmit = e=>{ e.preventDefault(); navigate(input.value); };
-  container.querySelector('.back-btn').onclick = ()=>{
-    const t=getTab(); if(t.histIndex>0){ t.histIndex--; navigate(t.history[t.histIndex], false); }
-  };
-  container.querySelector('.fwd-btn').onclick = ()=>{
-    const t=getTab(); if(t.histIndex<t.history.length-1){ t.histIndex++; navigate(t.history[t.histIndex], false); }
-  };
-  container.querySelector('.reload-btn').onclick = ()=>{
+
+  bindActivation(container.querySelector('.new-tab-btn'), newTab);
+  bindActivation(container.querySelector('.back-btn'), ()=>{
+    const t=getTab(); if(t && t.histIndex>0){ t.histIndex--; navigate(t.history[t.histIndex], false); }
+  });
+  bindActivation(container.querySelector('.fwd-btn'), ()=>{
+    const t=getTab(); if(t && t.histIndex<t.history.length-1){ t.histIndex++; navigate(t.history[t.histIndex], false); }
+  });
+  bindActivation(container.querySelector('.reload-btn'), ()=>{
     const t=getTab();
-    if(t.url) navigate(t.url, false);
+    if(t && t.url) navigate(t.url, false);
     else showStartPage();
-  };
-  container.querySelector('.new-tab-btn').onclick = newTab;
+  });
   let loadWatchdog=null;
   function armLoadWatchdog(targetUrl){
     if(loadWatchdog) clearTimeout(loadWatchdog);
