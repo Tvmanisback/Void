@@ -280,13 +280,11 @@
     setInterval(tick, 15000);
   }
 
-  // Updated proxy list — corsproxy.io now requires an API key
-  const PROXIES = [
-    { name: 'cors.dev', build: (url) => `https://proxy.cors.dev/${url}` },
-    { name: 'allorigins', build: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-    { name: 'CORX', build: (url) => `https://corx.envx.cn/fetch?url=${encodeURIComponent(url)}` },
-    { name: 'Direct (no proxy)', build: (url) => url }
-  ];
+  // Single locked proxy
+  const PROXY_KEY = '1ec6a957';
+  function buildProxyUrl(target) {
+    return `https://corsproxy.io/?key=${PROXY_KEY}&url=${encodeURIComponent(target)}`;
+  }
 
   function createBrowser(container) {
     container.innerHTML = `
@@ -299,9 +297,6 @@
             <input class="url-input" type="text" placeholder="Enter URL (https://...)" spellcheck="false" />
             <button type="submit" class="go-btn">Go</button>
           </form>
-          <select class="proxy-select" title="Proxy backend">
-            ${PROXIES.map((p, i) => `<option value="${i}">${p.name}</option>`).join('')}
-          </select>
         </div>
         <div style="flex:1;position:relative;min-height:0">
           <iframe class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" referrerpolicy="no-referrer"></iframe>
@@ -314,7 +309,6 @@
     const input = container.querySelector('.url-input');
     const form = container.querySelector('.url-form');
     const status = container.querySelector('.status-text');
-    const proxySelect = container.querySelector('.proxy-select');
     const history = [];
     let histIndex = -1;
 
@@ -323,9 +317,8 @@
       if (!url) return;
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
-      const proxy = PROXIES[parseInt(proxySelect.value, 10)];
-      status.textContent = `Loading via ${proxy.name}…`;
-      iframe.src = proxy.build(url);
+      status.textContent = 'Loading…';
+      iframe.src = buildProxyUrl(url);
 
       if (push) {
         history.splice(histIndex + 1);
@@ -436,14 +429,6 @@
           <label><input type="checkbox" id="setting-anim" checked /> Window animations</label>
         </div>
         <div class="card">
-          <p style="margin:0 0 8px">Default browser proxy</p>
-          <select id="default-proxy" style="width:100%;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);padding:0 10px">
-            <option>cors.dev</option>
-            <option>allorigins</option>
-            <option>CORX</option>
-          </select>
-        </div>
-        <div class="card">
           <p style="margin:0">Void OS stores nothing on a server. Everything runs locally in your browser session.</p>
         </div>
       </div>
@@ -458,7 +443,7 @@
         <div class="card">
           <strong>Included apps</strong>
           <ul style="margin:8px 0 0 18px;color:var(--text-dim);font-size:13px;line-height:1.7">
-            <li><strong>Void Browser</strong> – Real proxy browser (multiple backends)</li>
+            <li><strong>Void Browser</strong> – Real proxy browser</li>
             <li><strong>VoidCode</strong> – Monaco-powered code editor</li>
             <li>Settings & system utilities</li>
           </ul>
