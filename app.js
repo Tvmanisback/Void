@@ -675,7 +675,8 @@ function createTerminal(container){
 function createFiles(container){
   let files=LS.get('files',[{name:'Welcome.txt',type:'file',content:'Welcome to Void OS Files!'},{name:'Projects',type:'folder'}]);
   container.innerHTML=`<div class="fm"><div class="fm-sidebar"><button class="active">📁 Home</button></div>
-    <div class="fm-main"><div class="fm-toolbar"><button id="fm-new-file">+ File</button><button id="fm-new-folder">+ Folder</button></div>
+    <div class="fm-main"><div class="fm-toolbar"><button id="fm-new-file" type="button">+ File</button><button id="fm-new-folder" type="button">+ Folder</button></div>
+    <form id="fm-entry-dialog" hidden><input id="fm-entry-name" placeholder="Name" required maxlength="120"/><button type="submit">Create</button><button type="button" id="fm-entry-cancel">Cancel</button></form>
     <div class="fm-list" id="fm-list"></div></div></div>`;
   const list=container.querySelector('#fm-list');
   function render(){
@@ -688,8 +689,28 @@ function createFiles(container){
     });
     LS.set('files',files);
   }
-  container.querySelector('#fm-new-file').onclick=()=>{ const name=prompt('File name:'); if(!name) return; files.push({name,type:'file',content:''}); render(); };
-  container.querySelector('#fm-new-folder').onclick=()=>{ const name=prompt('Folder name:'); if(!name) return; files.push({name,type:'folder'}); render(); };
+  function showEntryDialog(type){
+    const form=container.querySelector('#fm-entry-dialog');
+    form.dataset.type=type;
+    form.hidden=false;
+    const field=container.querySelector('#fm-entry-name');
+    field.value='';
+    field.placeholder=type==='folder'?'Folder name':'File name';
+    field.focus();
+  }
+  bindActivation(container.querySelector('#fm-new-file'),()=>showEntryDialog('file'));
+  bindActivation(container.querySelector('#fm-new-folder'),()=>showEntryDialog('folder'));
+  bindActivation(container.querySelector('#fm-entry-cancel'),()=>{container.querySelector('#fm-entry-dialog').hidden=true;});
+  container.querySelector('#fm-entry-dialog').addEventListener('submit',event=>{
+    event.preventDefault();
+    const form=event.currentTarget;
+    const name=container.querySelector('#fm-entry-name').value.trim();
+    if(!name) return;
+    const type=form.dataset.type;
+    files.push(type==='folder'?{name,type}:{name,type,content:''});
+    form.hidden=true;
+    render();
+  });
   render();
 }
 
