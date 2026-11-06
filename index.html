@@ -30,6 +30,22 @@
     </div>
   </div>
 
+  <main id="auth-screen" class="hidden">
+    <section class="auth-panel">
+      <div class="auth-mark">◉</div><div class="auth-eyebrow">VOID OPERATING SYSTEM</div>
+      <h1 id="auth-title">Welcome back.</h1><p id="auth-description">Sign in to continue to your desktop.</p>
+      <div class="auth-tabs"><button type="button" class="active" id="auth-signin-tab">Sign in</button><button type="button" id="auth-signup-tab">Create account</button></div>
+      <form id="auth-form">
+        <label class="auth-field" id="auth-name-wrap" hidden><span>Display name</span><input id="auth-name" type="text" autocomplete="name" maxlength="32" placeholder="What should we call you?"></label>
+        <label class="auth-field"><span>Email</span><input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required></label>
+        <label class="auth-field"><span>Password</span><input id="auth-password" type="password" autocomplete="current-password" placeholder="Your password" required minlength="6"></label>
+        <div class="auth-message" id="auth-message" role="status" aria-live="polite"></div>
+        <button class="auth-submit" id="auth-submit" type="submit">Sign in</button>
+      </form>
+      <div class="auth-connection" id="auth-connection"><span></span> Waiting for Supabase project URL and anon key</div>
+      <p class="auth-footnote">Authentication will be handled by your Supabase project once connected.</p>
+    </section>
+  </main>
   <div id="desktop" class="hidden">
     <div id="desktop-icons"></div>
     <div id="windows-container"></div>
@@ -64,6 +80,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
   <script src="app.js"></script>
 </body>
