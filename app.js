@@ -177,9 +177,9 @@ function openApp(appId){
     <div class="titlebar">
       <div class="title">${iconImgSmall(app.icon)}<span>${app.name}</span></div>
       <div class="controls">
-        <button class="ctrl min">─</button>
-        <button class="ctrl max">□</button>
-        <button class="ctrl close">✕</button>
+        <button type="button" class="ctrl min" aria-label="Minimize">─</button>
+        <button type="button" class="ctrl max" aria-label="Maximize">□</button>
+        <button type="button" class="ctrl close" aria-label="Close window">✕</button>
       </div>
     </div>
     <div class="window-body"></div>
