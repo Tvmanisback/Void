@@ -225,28 +225,40 @@ function closeWindow(id){
 }
 
 function makeDraggable(el){
-  const bar=el.querySelector('.titlebar');
-  let ox,oy,drag=false;
-  function start(e){
-    if(e.target.closest('.ctrl')||el.classList.contains('maximized')) return;
-    drag=true;
-    const pt = e.touches ? e.touches[0] : e;
-    ox=pt.clientX-el.offsetLeft; oy=pt.clientY-el.offsetTop;
-    e.preventDefault();
+  const bar = el.querySelector('.titlebar');
+  if(!bar) return;
+
+  let dragPointer = null;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  function stopDrag(){
+    if(dragPointer === null) return;
+    dragPointer = null;
+    window.removeEventListener('pointermove', moveDrag);
+    window.removeEventListener('pointerup', stopDrag);
+    window.removeEventListener('pointercancel', stopDrag);
   }
-  function move(e){
-    if(!drag) return;
-    const pt = e.touches ? e.touches[0] : e;
-    el.style.left=Math.max(0,pt.clientX-ox)+'px';
-    el.style.top=Math.max(0,pt.clientY-oy)+'px';
+
+  function moveDrag(e){
+    if(dragPointer === null || e.pointerId !== dragPointer) return;
+    // Keep the title bar reachable so a window cannot be dragged completely away.
+    const maxLeft = Math.max(0, window.innerWidth - 80);
+    const maxTop = Math.max(0, window.innerHeight - 90);
+    el.style.left = Math.min(maxLeft, Math.max(0, e.clientX - offsetX)) + 'px';
+    el.style.top = Math.min(maxTop, Math.max(0, e.clientY - offsetY)) + 'px';
   }
-  function end(){ drag=false; }
-  bar.addEventListener('mousedown', start);
-  bar.addEventListener('touchstart', start, {passive:false});
-  window.addEventListener('mousemove', move);
-  window.addEventListener('touchmove', move, {passive:false});
-  window.addEventListener('mouseup', end);
-  window.addEventListener('touchend', end);
+
+  bar.addEventListener('pointerdown', e=>{
+    // Only drag from the title bar itself, never from its buttons or controls.
+    if(e.button !== 0 || e.target.closest('button, input, a, .ctrl') || el.classList.contains('maximized')) return;
+    dragPointer = e.pointerId;
+    offsetX = e.clientX - el.offsetLeft;
+    offsetY = e.clientY - el.offsetTop;
+    window.addEventListener('pointermove', moveDrag);
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
+  });
 }
 function makeResizable(el){
   el.querySelectorAll('.resize-handle').forEach(handle=>{
