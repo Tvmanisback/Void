@@ -4,9 +4,9 @@
 
   // ---------- State ----------
   let zCounter = 20;
-  const openWindows = new Map(); // id -> {el, appId, title}
+  const openWindows = new Map();
   let activeId = null;
-  let monacoEditors = new Map();
+  const monacoEditors = new Map();
 
   // ---------- Apps Registry ----------
   const APPS = [
@@ -48,13 +48,12 @@
     }
   ];
 
-  // Proper icons
-  APPS.find(a => a.id === 'voidcode').icon = ' enthralled';
+  // Force correct icons
+  APPS[1].icon = ' enthralled';
 
   // ---------- Boot ----------
   window.addEventListener('DOMContentLoaded', () => {
-    // Ensure clean icon
-    APPS.find(a => a.id === 'voidcode').icon = ' enthralled';
+    APPS[1].icon = ' enthralled';
 
     setTimeout(() => {
       document.getElementById('boot-screen').classList.add('fade');
@@ -70,7 +69,6 @@
     }, 1700);
   });
 
-  // ---------- Desktop Icons ----------
   function initDesktop() {
     const container = document.getElementById('desktop-icons');
     APPS.filter(a => a.desktop).forEach(app => {
@@ -82,7 +80,6 @@
     });
   }
 
-  // ---------- Start Menu ----------
   function initStartMenu() {
     const list = document.getElementById('start-apps');
     APPS.forEach(app => {
@@ -119,7 +116,6 @@
     document.getElementById('start-btn').classList.remove('active');
   }
 
-  // ---------- Taskbar ----------
   function initTaskbar() {}
 
   function updateTaskbar() {
@@ -143,7 +139,6 @@
     });
   }
 
-  // ---------- Window Manager ----------
   function openApp(appId) {
     for (const [id, win] of openWindows) {
       if (win.appId === appId) {
@@ -197,9 +192,7 @@
       if (activeId === id) activeId = null;
       updateTaskbar();
     });
-    el.querySelector('.max').addEventListener('click', () => {
-      el.classList.toggle('maximized');
-    });
+    el.querySelector('.max').addEventListener('click', () => el.classList.toggle('maximized'));
 
     el.addEventListener('mousedown', () => focusWindow(id));
     makeDraggable(el);
@@ -257,36 +250,28 @@
   }
 
   function makeResizable(el) {
-    const handles = el.querySelectorAll('.resize-handle');
-    handles.forEach(handle => {
+    el.querySelectorAll('.resize-handle').forEach(handle => {
       handle.addEventListener('mousedown', (e) => {
         if (el.classList.contains('maximized')) return;
         e.preventDefault();
         e.stopPropagation();
         const dir = handle.className.split(' ')[1];
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startW = el.offsetWidth;
-        const startH = el.offsetHeight;
-        const startL = el.offsetLeft;
-        const startT = el.offsetTop;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = el.offsetWidth, startH = el.offsetHeight;
+        const startL = el.offsetLeft, startT = el.offsetTop;
 
         function onMove(ev) {
           let w = startW, h = startH, l = startL, t = startT;
-          const dx = ev.clientX - startX;
-          const dy = ev.clientY - startY;
-
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
           if (dir.includes('e')) w = Math.max(320, startW + dx);
           if (dir.includes('s')) h = Math.max(220, startH + dy);
           if (dir.includes('w')) { w = Math.max(320, startW - dx); l = startL + (startW - w); }
           if (dir.includes('n')) { h = Math.max(220, startH - dy); t = startT + (startH - h); }
-
           el.style.width = w + 'px';
           el.style.height = h + 'px';
           el.style.left = l + 'px';
           el.style.top = t + 'px';
         }
-
         function onUp() {
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
@@ -297,12 +282,10 @@
     });
   }
 
-  // ---------- Clock ----------
   function startClock() {
     const el = document.getElementById('clock');
     function tick() {
-      const now = new Date();
-      el.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
     tick();
     setInterval(tick, 15000);
@@ -310,7 +293,6 @@
 
   // ==================== APPS ====================
 
-  // ---- Void Browser (Real Proxy) ----
   const PROXIES = [
     { name: 'corsproxy.io', build: (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
     { name: 'allorigins', build: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
@@ -336,9 +318,7 @@
         <div style="flex:1;position:relative;min-height:0">
           <iframe class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" referrerpolicy="no-referrer"></iframe>
         </div>
-        <div class="browser-status">
-          <span class="status-text">Ready</span>
-        </div>
+        <div class="browser-status"><span class="status-text">Ready</span></div>
       </div>
     `;
 
@@ -355,12 +335,9 @@
       if (!url) return;
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
-      const proxyIdx = parseInt(proxySelect.value, 10);
-      const proxy = PROXIES[proxyIdx];
-      const finalUrl = proxy.build(url);
-
+      const proxy = PROXIES[parseInt(proxySelect.value, 10)];
       status.textContent = `Loading via ${proxy.name}…`;
-      iframe.src = finalUrl;
+      iframe.src = proxy.build(url);
 
       if (push) {
         history.splice(histIndex + 1);
@@ -376,36 +353,22 @@
       container.querySelector('.fwd-btn').disabled = histIndex >= history.length - 1;
     }
 
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      navigate(input.value);
-    });
-
+    form.addEventListener('submit', e => { e.preventDefault(); navigate(input.value); });
     container.querySelector('.back-btn').addEventListener('click', () => {
-      if (histIndex > 0) {
-        histIndex--;
-        navigate(history[histIndex], false);
-      }
+      if (histIndex > 0) { histIndex--; navigate(history[histIndex], false); }
     });
     container.querySelector('.fwd-btn').addEventListener('click', () => {
-      if (histIndex < history.length - 1) {
-        histIndex++;
-        navigate(history[histIndex], false);
-      }
+      if (histIndex < history.length - 1) { histIndex++; navigate(history[histIndex], false); }
     });
     container.querySelector('.reload-btn').addEventListener('click', () => {
       if (histIndex >= 0) navigate(history[histIndex], false);
     });
-
-    iframe.addEventListener('load', () => {
-      status.textContent = 'Loaded';
-    });
+    iframe.addEventListener('load', () => { status.textContent = 'Loaded'; });
 
     input.value = 'https://example.com';
     navigate('https://example.com');
   }
 
-  // ---- VoidCode (Monaco) ----
   function createVoidCode(container, winId) {
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%">
@@ -473,23 +436,16 @@
       });
     }
 
-    if (window.require) {
-      initEditor();
-    } else {
-      setTimeout(initEditor, 400);
-    }
+    if (window.require) initEditor();
+    else setTimeout(initEditor, 400);
   }
 
-  // ---- Settings ----
   function createSettings(container) {
     container.innerHTML = `
       <div class="app-content">
         <h2>Settings</h2>
         <div class="card">
-          <label>
-            <input type="checkbox" id="setting-anim" checked />
-            Window animations
-          </label>
+          <label><input type="checkbox" id="setting-anim" checked /> Window animations</label>
         </div>
         <div class="card">
           <p style="margin:0 0 8px">Default browser proxy</p>
@@ -506,7 +462,6 @@
     `;
   }
 
-  // ---- About ----
   function createAbout(container) {
     container.innerHTML = `
       <div class="app-content">
@@ -521,7 +476,7 @@
           </ul>
         </div>
         <div class="card">
-          <p style="margin:0;font-size:13px">Built as a pure frontend experience. No backend required. Perfect for demos, portfolios, and playing with the idea of a web OS.</p>
+          <p style="margin:0;font-size:13px">Built as a pure frontend experience. No backend required.</p>
         </div>
         <p style="font-size:12px;color:var(--text-dim);margin-top:16px">github.com/Tvmanisback/Void</p>
       </div>
