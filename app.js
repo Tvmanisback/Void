@@ -38,6 +38,21 @@ const LS = {
 };
 
 const isMobile = () => window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+function bindActivation(element, handler){
+  if(!element) return;
+  let lastTouch=0;
+  element.addEventListener('pointerup', event=>{
+    if(event.pointerType!=='touch' && event.pointerType!=='pen') return;
+    if(event.button!==0) return;
+    event.preventDefault();
+    lastTouch=Date.now();
+    handler(event);
+  });
+  element.addEventListener('click', event=>{
+    if(Date.now()-lastTouch<800){ event.preventDefault(); return; }
+    handler(event);
+  });
+}
 
 function initAuth(){
   window.VoidAuth.init(user=>{
@@ -697,7 +712,7 @@ function createNotes(container){
       list.appendChild(el);
     });
   }
-  container.querySelector('#note-new').onclick=()=>{ const id=Date.now(); notes.unshift({id,title:'New Note',body:''}); current=id; titleEl.value='New Note'; bodyEl.value=''; LS.set('notes',notes); renderList(); };
+  bindActivation(container.querySelector('#note-new'),()=>{ const id=Date.now(); notes.unshift({id,title:'New Note',body:''}); current=id; titleEl.value='New Note'; bodyEl.value=''; LS.set('notes',notes); renderList(); });
   titleEl.oninput=save; bodyEl.oninput=save;
   if(current){ const n=notes.find(x=>x.id===current); titleEl.value=n.title; bodyEl.value=n.body; }
   renderList();
@@ -717,7 +732,7 @@ function createStore(container){
   catalog.forEach(app=>{
     const card=document.createElement('div'); card.className='store-card';
     card.innerHTML=`<div class="icon">${iconImg(app.icon)}</div><div class="name">${app.name}</div><div class="desc">${app.desc}</div><button>Open</button>`;
-    card.querySelector('button').onclick=()=>openApp(app.id);
+    bindActivation(card.querySelector('button'),()=>openApp(app.id));
     grid.appendChild(card);
   });
 }
