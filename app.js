@@ -95,8 +95,8 @@ function initDesktop(){
     const el = document.createElement('div');
     el.className = 'desktop-icon';
     el.innerHTML = `<div class="icon-img">${iconImg(app.icon)}</div><span>${app.name}</span>`;
-    el.addEventListener('dblclick', ()=>openApp(app.id));
-    el.addEventListener('click', ()=>{ if(isMobile()) openApp(app.id); });
+    // Open apps with one click on desktop and mobile.
+    el.addEventListener('click', ()=>openApp(app.id));
     c.appendChild(el);
   });
 }
@@ -216,11 +216,28 @@ function openApp(appId){
     message.textContent = app.name + ' could not open: ' + (error && error.message ? error.message : String(error));
     body.appendChild(message);
   }
-  el.querySelector('.close').onclick = ()=>closeWindow(id);
-  el.querySelector('.min').onclick = ()=>{ el.classList.add('minimized'); if(activeId===id) activeId=null; updateTaskbar(); };
-  el.querySelector('.max').onclick = ()=>el.classList.toggle('maximized');
-  el.addEventListener('mousedown', ()=>focusWindow(id));
-  el.addEventListener('touchstart', ()=>focusWindow(id), {passive:true});
+  // Delegate window-control clicks from the window itself. This keeps the
+  // controls responsive even after app content is rebuilt.
+  el.addEventListener('click', event=>{
+    const control=event.target.closest('.ctrl');
+    if(!control || !el.contains(control)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if(control.classList.contains('close')) closeWindow(id);
+    else if(control.classList.contains('min')){
+      el.classList.add('minimized');
+      if(activeId===id) activeId=null;
+      updateTaskbar();
+    } else if(control.classList.contains('max')){
+      el.classList.toggle('maximized');
+    }
+  });
+  el.querySelectorAll('.ctrl').forEach(control=>{
+    control.addEventListener('pointerdown', event=>event.stopPropagation());
+  });
+  el.addEventListener('pointerdown', event=>{
+    if(!event.target.closest('.ctrl')) focusWindow(id);
+  });
   makeDraggable(el); makeResizable(el);
   focusWindow(id); updateTaskbar();
 }
