@@ -280,8 +280,9 @@
     setInterval(tick, 15000);
   }
 
+  // Updated proxy list — corsproxy.io now requires an API key
   const PROXIES = [
-    { name: 'corsproxy.io', build: (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
+    { name: 'cors.dev', build: (url) => `https://proxy.cors.dev/${url}` },
     { name: 'allorigins', build: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
     { name: 'CORX', build: (url) => `https://corx.envx.cn/fetch?url=${encodeURIComponent(url)}` },
     { name: 'Direct (no proxy)', build: (url) => url }
@@ -437,7 +438,7 @@
         <div class="card">
           <p style="margin:0 0 8px">Default browser proxy</p>
           <select id="default-proxy" style="width:100%;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);padding:0 10px">
-            <option>corsproxy.io</option>
+            <option>cors.dev</option>
             <option>allorigins</option>
             <option>CORX</option>
           </select>
