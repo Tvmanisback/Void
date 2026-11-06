@@ -509,7 +509,7 @@ function createBrowser(container){
 /* ===== VoidCode ===== */
 function createVoidCode(container, winId){
   const files = {
-    'main.js': { lang:'javascript', content:`// VoidCode — fully working editor\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('developer'));\n` },
+    'main.js': { lang:'javascript', content:`// VoidCode — fully working editor\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('visitor'));\n` },
     'index.html': { lang:'html', content:`<!DOCTYPE html>\n<html>\n<head>\n  <title>Void</title>\n</head>\n<body>\n  <h1>Hello from VoidCode</h1>\n</body>\n</html>` },
     'style.css': { lang:'css', content:`body {\n  background: #0b0b12;\n  color: #e8e6f0;\n  font-family: system-ui, sans-serif;\n}` }
   };
