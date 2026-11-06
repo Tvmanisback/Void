@@ -20,7 +20,7 @@
     {
       id: 'voidcode',
       name: 'VoidCode',
-      icon: ' enthralled',
+      icon: '💻',
       desktop: true,
       width: 900,
       height: 620,
@@ -46,12 +46,7 @@
     }
   ];
 
-  // Correct icon
-  APPS[1].icon = ' enthralled';
-
   window.addEventListener('DOMContentLoaded', () => {
-    APPS[1].icon = ' enthralled';
-
     setTimeout(() => {
       document.getElementById('boot-screen').classList.add('fade');
       setTimeout(() => {
@@ -255,7 +250,7 @@
         const startL = el.offsetLeft, startT = el.offsetTop;
 
         function onMove(ev) {
-          let w = startW, h = startH, l = startL, t = startT;
+          let w = startW, h = startH, l = startL, t = indet;
           const dx = ev.clientX - startX, dy = ev.clientY - startY;
           if (dir.includes('e')) w = Math.max(320, startW + dx);
           if (dir.includes('s')) h = Math.max(220, startH + dy);
