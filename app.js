@@ -13,12 +13,8 @@ const ICONS = {
   about: 'icons/about.svg'
 };
 
-function iconImg(src) {
-  return `<img src="${src}" width="26" height="26" alt="" draggable="false">`;
-}
-function iconImgSmall(src) {
-  return `<img src="${src}" width="18" height="18" alt="" draggable="false">`;
-}
+function iconImg(src){ return `<img src="${src}" width="26" height="26" alt="" draggable="false">`; }
+function iconImgSmall(src){ return `<img src="${src}" width="18" height="18" alt="" draggable="false">`; }
 
 let zCounter = 20;
 const openWindows = new Map();
@@ -37,9 +33,11 @@ const APPS = [
 ];
 
 const LS = {
-  get(k, d){ try{ return JSON.parse(localStorage.getItem('void_'+k)) ?? d }catch{ return d } },
-  set(k, v){ localStorage.setItem('void_'+k, JSON.stringify(v)) }
+  get(k,d){ try{ return JSON.parse(localStorage.getItem('void_'+k)) ?? d }catch{ return d } },
+  set(k,v){ localStorage.setItem('void_'+k, JSON.stringify(v)) }
 };
+
+const isMobile = () => window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
@@ -50,9 +48,9 @@ window.addEventListener('DOMContentLoaded', () => {
       initDesktop();
       initStartMenu();
       startClock();
-      openApp('about');
+      if(!isMobile()) openApp('about');
     }, 450);
-  }, 1600);
+  }, 1400);
 });
 
 function initDesktop(){
@@ -63,6 +61,7 @@ function initDesktop(){
     el.className = 'desktop-icon';
     el.innerHTML = `<div class="icon-img">${iconImg(app.icon)}</div><span>${app.name}</span>`;
     el.addEventListener('dblclick', ()=>openApp(app.id));
+    el.addEventListener('click', ()=>{ if(isMobile()) openApp(app.id); });
     c.appendChild(el);
   });
 }
@@ -119,10 +118,21 @@ function openApp(appId){
   const el = document.createElement('div');
   el.className = 'window';
   el.dataset.id = id;
-  const w=app.width||700, h=app.height||500;
-  el.style.width=w+'px'; el.style.height=h+'px';
-  el.style.left = Math.max(40,(innerWidth-w)/2+(openWindows.size*24)%120)+'px';
-  el.style.top = Math.max(30,(innerHeight-h-60)/2+(openWindows.size*20)%80)+'px';
+
+  let w = app.width || 700;
+  let h = app.height || 500;
+  if(isMobile()){
+    w = Math.min(window.innerWidth - 12, w);
+    h = Math.min(window.innerHeight - 70, h);
+    el.style.left = '6px';
+    el.style.top = '6px';
+  } else {
+    el.style.left = Math.max(40,(innerWidth-w)/2+(openWindows.size*24)%120)+'px';
+    el.style.top = Math.max(30,(innerHeight-h-60)/2+(openWindows.size*20)%80)+'px';
+  }
+  el.style.width = w+'px';
+  el.style.height = h+'px';
+
   el.innerHTML = `
     <div class="titlebar">
       <div class="title">${iconImgSmall(app.icon)}<span>${app.name}</span></div>
@@ -142,6 +152,7 @@ function openApp(appId){
   el.querySelector('.min').onclick = ()=>{ el.classList.add('minimized'); if(activeId===id) activeId=null; updateTaskbar(); };
   el.querySelector('.max').onclick = ()=>el.classList.toggle('maximized');
   el.addEventListener('mousedown', ()=>focusWindow(id));
+  el.addEventListener('touchstart', ()=>focusWindow(id), {passive:true});
   makeDraggable(el); makeResizable(el);
   document.getElementById('windows-container').appendChild(el);
   openWindows.set(id,{el,appId,title:app.name});
@@ -164,12 +175,26 @@ function closeWindow(id){
 function makeDraggable(el){
   const bar=el.querySelector('.titlebar');
   let ox,oy,drag=false;
-  bar.addEventListener('mousedown',e=>{
+  function start(e){
     if(e.target.closest('.ctrl')||el.classList.contains('maximized')) return;
-    drag=true; ox=e.clientX-el.offsetLeft; oy=e.clientY-el.offsetTop; e.preventDefault();
-  });
-  window.addEventListener('mousemove',e=>{ if(!drag) return; el.style.left=Math.max(0,e.clientX-ox)+'px'; el.style.top=Math.max(0,e.clientY-oy)+'px'; });
-  window.addEventListener('mouseup',()=>drag=false);
+    drag=true;
+    const pt = e.touches ? e.touches[0] : e;
+    ox=pt.clientX-el.offsetLeft; oy=pt.clientY-el.offsetTop;
+    e.preventDefault();
+  }
+  function move(e){
+    if(!drag) return;
+    const pt = e.touches ? e.touches[0] : e;
+    el.style.left=Math.max(0,pt.clientX-ox)+'px';
+    el.style.top=Math.max(0,pt.clientY-oy)+'px';
+  }
+  function end(){ drag=false; }
+  bar.addEventListener('mousedown', start);
+  bar.addEventListener('touchstart', start, {passive:false});
+  window.addEventListener('mousemove', move);
+  window.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('mouseup', end);
+  window.addEventListener('touchend', end);
 }
 function makeResizable(el){
   el.querySelectorAll('.resize-handle').forEach(handle=>{
@@ -181,10 +206,10 @@ function makeResizable(el){
       function move(ev){
         let w=sw,h=sh,l=sl,t=st;
         const dx=ev.clientX-sx,dy=ev.clientY-sy;
-        if(dir.includes('e')) w=Math.max(320,sw+dx);
-        if(dir.includes('s')) h=Math.max(220,sh+dy);
-        if(dir.includes('w')){ w=Math.max(320,sw-dx); l=sl+(sw-w); }
-        if(dir.includes('n')){ h=Math.max(220,sh-dy); t=st+(sh-h); }
+        if(dir.includes('e')) w=Math.max(280,sw+dx);
+        if(dir.includes('s')) h=Math.max(200,sh+dy);
+        if(dir.includes('w')){ w=Math.max(280,sw-dx); l=sl+(sw-w); }
+        if(dir.includes('n')){ h=Math.max(200,sh-dy); t=st+(sh-h); }
         el.style.width=w+'px'; el.style.height=h+'px'; el.style.left=l+'px'; el.style.top=t+'px';
       }
       function up(){ window.removeEventListener('mousemove',move); window.removeEventListener('mouseup',up); }
@@ -210,73 +235,296 @@ function startClock(){
 const PROXY_KEY='1ec6a957';
 function buildProxyUrl(t){ return `https://corsproxy.io/?key=${PROXY_KEY}&url=${encodeURIComponent(t)}`; }
 
-function createBrowser(container){
-  container.innerHTML=`<div style="display:flex;flex-direction:column;height:100%">
-    <div class="browser-toolbar">
-      <button class="back-btn">←</button><button class="fwd-btn">→</button><button class="reload-btn">↻</button>
-      <form class="url-form"><input class="url-input" placeholder="Enter URL..." spellcheck="false"/><button type="submit" class="go-btn">Go</button></form>
-    </div>
-    <div style="flex:1;min-height:0"><iframe class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" referrerpolicy="no-referrer"></iframe></div>
-    <div class="browser-status"><span class="status-text">Ready</span></div></div>`;
-  const iframe=container.querySelector('.browser-frame'), input=container.querySelector('.url-input');
-  const form=container.querySelector('.url-form'), status=container.querySelector('.status-text');
-  const history=[]; let histIndex=-1;
-  function nav(raw,push=true){
-    let url=raw.trim(); if(!url) return;
-    if(!/^https?:\/\//i.test(url)) url='https://'+url;
-    status.textContent='Loading…'; iframe.src=buildProxyUrl(url);
-    if(push){ history.splice(histIndex+1); history.push(url); histIndex=history.length-1; }
-    input.value=url; updateNav();
-  }
-  function updateNav(){
-    container.querySelector('.back-btn').disabled=histIndex<=0;
-    container.querySelector('.fwd-btn').disabled=histIndex>=history.length-1;
-  }
-  form.onsubmit=e=>{e.preventDefault();nav(input.value)};
-  container.querySelector('.back-btn').onclick=()=>{if(histIndex>0){histIndex--;nav(history[histIndex],false)}};
-  container.querySelector('.fwd-btn').onclick=()=>{if(histIndex<history.length-1){histIndex++;nav(history[histIndex],false)}};
-  container.querySelector('.reload-btn').onclick=()=>{if(histIndex>=0)nav(history[histIndex],false)};
-  iframe.onload=()=>status.textContent='Loaded';
-  input.value='https://example.com'; nav('https://example.com');
+/* ===== Void Start Page (no URL) ===== */
+function getStartPageHTML(){
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+background:#0b0b12;color:#e8e6f0;font-family:system-ui,-apple-system,sans-serif;padding:24px}
+.logo{font-size:64px;font-weight:700;letter-spacing:-2px;margin-bottom:8px;
+background:linear-gradient(135deg,#a78bfa,#6d28d9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.tag{color:#9b97b0;font-size:14px;margin-bottom:32px}
+form{width:100%;max-width:520px;display:flex;gap:0;border-radius:28px;overflow:hidden;
+border:1px solid #2a2a38;background:#12121a;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+input{flex:1;height:52px;border:none;background:transparent;color:#e8e6f0;padding:0 22px;font-size:16px;outline:none}
+button{height:52px;padding:0 22px;border:none;background:#8b5cf6;color:#fff;font-weight:600;cursor:pointer;font-size:15px}
+button:hover{filter:brightness(1.1)}
+.links{margin-top:28px;display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+.links a{color:#9b97b0;text-decoration:none;font-size:13px}
+.links a:hover{color:#a78bfa}
+</style></head><body>
+<div class="logo">Void</div>
+<div class="tag">Search the web through the void</div>
+<form id="s"><input id="q" placeholder="Search or enter URL" autofocus autocomplete="off"/><button type="submit">Search</button></form>
+<div class="links">
+<a href="#" data-url="https://wikipedia.org">Wikipedia</a>
+<a href="#" data-url="https://github.com">GitHub</a>
+<a href="#" data-url="https://reddit.com">Reddit</a>
+<a href="#" data-url="https://youtube.com">YouTube</a>
+</div>
+<script>
+document.getElementById('s').onsubmit=function(e){
+  e.preventDefault();
+  var q=document.getElementById('q').value.trim();
+  if(!q) return;
+  var url = /^https?:\/\//i.test(q) ? q : (q.includes('.') && !q.includes(' ') ? 'https://'+q : 'https://duckduckgo.com/?q='+encodeURIComponent(q));
+  parent.postMessage({type:'void-navigate',url:url},'*');
+};
+document.querySelectorAll('[data-url]').forEach(function(a){
+  a.onclick=function(e){ e.preventDefault(); parent.postMessage({type:'void-navigate',url:a.dataset.url},'*'); };
+});
+</script></body></html>`;
 }
 
+/* ===== Browser with Tabs ===== */
+function createBrowser(container){
+  let tabs = [{ id:1, title:'New Tab', url:null, history:[], histIndex:-1 }];
+  let activeTab = 1;
+  let nextId = 2;
+
+  container.innerHTML = `
+  <div class="browser" style="display:flex;flex-direction:column;height:100%">
+    <div class="browser-tabs" id="browser-tabs"></div>
+    <div class="browser-toolbar">
+      <button class="back-btn" title="Back">←</button>
+      <button class="fwd-btn" title="Forward">→</button>
+      <button class="reload-btn" title="Reload">↻</button>
+      <form class="url-form" style="flex:1;display:flex;gap:6px">
+        <input class="url-input" type="text" placeholder="Search or enter URL" spellcheck="false"/>
+        <button type="submit" class="go-btn">Go</button>
+      </form>
+      <button class="new-tab-btn" title="New Tab">+</button>
+    </div>
+    <div style="flex:1;position:relative;min-height:0">
+      <iframe class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" referrerpolicy="no-referrer"></iframe>
+    </div>
+    <div class="browser-status"><span class="status-text">Ready</span></div>
+  </div>`;
+
+  const tabsEl = container.querySelector('#browser-tabs');
+  const iframe = container.querySelector('.browser-frame');
+  const input = container.querySelector('.url-input');
+  const form = container.querySelector('.url-form');
+  const status = container.querySelector('.status-text');
+
+  function getTab(){ return tabs.find(t=>t.id===activeTab); }
+
+  function renderTabs(){
+    tabsEl.innerHTML = '';
+    tabs.forEach(t=>{
+      const el = document.createElement('div');
+      el.className = 'browser-tab'+(t.id===activeTab?' active':'');
+      el.innerHTML = `<span class="tab-title">${t.title}</span><button class="tab-close" data-id="${t.id}">×</button>`;
+      el.onclick = (e)=>{
+        if(e.target.classList.contains('tab-close')) return;
+        switchTab(t.id);
+      };
+      el.querySelector('.tab-close').onclick = (e)=>{ e.stopPropagation(); closeTab(t.id); };
+      tabsEl.appendChild(el);
+    });
+  }
+
+  function switchTab(id){
+    activeTab = id;
+    const t = getTab();
+    input.value = t.url || '';
+    if(t.url){
+      status.textContent = 'Loading…';
+      iframe.src = buildProxyUrl(t.url);
+    } else {
+      showStartPage();
+    }
+    renderTabs();
+    updateNav();
+  }
+
+  function closeTab(id){
+    if(tabs.length===1){
+      // reset to start
+      tabs[0] = { id:tabs[0].id, title:'New Tab', url:null, history:[], histIndex:-1 };
+      activeTab = tabs[0].id;
+      showStartPage();
+      input.value = '';
+      renderTabs();
+      return;
+    }
+    const idx = tabs.findIndex(t=>t.id===id);
+    tabs.splice(idx,1);
+    if(activeTab===id){
+      activeTab = tabs[Math.max(0,idx-1)].id;
+      switchTab(activeTab);
+    } else renderTabs();
+  }
+
+  function newTab(){
+    const t = { id:nextId++, title:'New Tab', url:null, history:[], histIndex:-1 };
+    tabs.push(t);
+    activeTab = t.id;
+    showStartPage();
+    input.value = '';
+    renderTabs();
+    updateNav();
+  }
+
+  function showStartPage(){
+    status.textContent = 'Start';
+    iframe.srcdoc = getStartPageHTML();
+  }
+
+  function navigate(raw, push=true){
+    let url = (raw||'').trim();
+    if(!url){ showStartPage(); return; }
+
+    // treat as search if no protocol and looks like search
+    if(!/^https?:\/\//i.test(url)){
+      if(url.includes('.') && !url.includes(' ')) url = 'https://' + url;
+      else url = 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
+    }
+
+    const t = getTab();
+    status.textContent = 'Loading…';
+    iframe.src = buildProxyUrl(url);
+    t.url = url;
+    t.title = url.replace(/^https?:\/\//,'').split('/')[0] || 'Tab';
+    if(push){
+      t.history.splice(t.histIndex+1);
+      t.history.push(url);
+      t.histIndex = t.history.length-1;
+    }
+    input.value = url;
+    renderTabs();
+    updateNav();
+  }
+
+  function updateNav(){
+    const t = getTab();
+    container.querySelector('.back-btn').disabled = !t || t.histIndex <= 0;
+    container.querySelector('.fwd-btn').disabled = !t || t.histIndex >= t.history.length-1;
+  }
+
+  form.onsubmit = e=>{ e.preventDefault(); navigate(input.value); };
+  container.querySelector('.back-btn').onclick = ()=>{
+    const t=getTab(); if(t.histIndex>0){ t.histIndex--; navigate(t.history[t.histIndex], false); }
+  };
+  container.querySelector('.fwd-btn').onclick = ()=>{
+    const t=getTab(); if(t.histIndex<t.history.length-1){ t.histIndex++; navigate(t.history[t.histIndex], false); }
+  };
+  container.querySelector('.reload-btn').onclick = ()=>{
+    const t=getTab();
+    if(t.url) navigate(t.url, false);
+    else showStartPage();
+  };
+  container.querySelector('.new-tab-btn').onclick = newTab;
+  iframe.onload = ()=>{ status.textContent = getTab()?.url ? 'Loaded' : 'Start'; };
+
+  window.addEventListener('message', (e)=>{
+    if(e.data && e.data.type==='void-navigate'){
+      navigate(e.data.url);
+    }
+  });
+
+  renderTabs();
+  showStartPage();
+}
+
+/* ===== VoidCode ===== */
 function createVoidCode(container, winId){
-  container.innerHTML=`<div class="vscode">
+  const files = {
+    'main.js': { lang:'javascript', content:`// VoidCode — fully working editor\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('developer'));\n` },
+    'index.html': { lang:'html', content:`<!DOCTYPE html>\n<html>\n<head>\n  <title>Void</title>\n</head>\n<body>\n  <h1>Hello from VoidCode</h1>\n</body>\n</html>` },
+    'style.css': { lang:'css', content:`body {\n  background: #0b0b12;\n  color: #e8e6f0;\n  font-family: system-ui, sans-serif;\n}` }
+  };
+  let current = 'main.js';
+
+  container.innerHTML = `<div class="vscode">
     <div class="vscode-activity">
       <button class="active" title="Explorer">📄</button>
-      <button title="Search">🔍</button>
-      <button title="Source">⎇</button>
     </div>
     <div class="vscode-sidebar">
       <div class="vscode-sidebar-header">Explorer</div>
-      <div class="vscode-sidebar-content">
-        <div class="vscode-file active">main.js</div>
-        <div class="vscode-file">index.html</div>
-        <div class="vscode-file">style.css</div>
-      </div>
+      <div class="vscode-sidebar-content" id="vc-files"></div>
     </div>
     <div class="vscode-main">
-      <div class="vscode-tabs"><div class="vscode-tab">main.js</div></div>
+      <div class="vscode-tabs" id="vc-tabs"></div>
       <div class="vscode-editor" id="monaco-${winId}"></div>
-      <div class="vscode-statusbar"><span>JavaScript</span><span>UTF-8</span><span>Ln 1, Col 1</span></div>
+      <div class="vscode-statusbar">
+        <span id="vc-lang">JavaScript</span>
+        <span>UTF-8</span>
+        <span id="vc-pos">Ln 1, Col 1</span>
+        <span style="margin-left:auto"></span>
+        <button id="vc-run" style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:12px;padding:0 8px">▶ Run</button>
+      </div>
     </div>
   </div>`;
-  const mount=container.querySelector(`#monaco-${winId}`);
+
+  const filesEl = container.querySelector('#vc-files');
+  const tabsEl = container.querySelector('#vc-tabs');
+  const langEl = container.querySelector('#vc-lang');
+  const posEl = container.querySelector('#vc-pos');
+  let editor = null;
+
+  function renderFiles(){
+    filesEl.innerHTML = '';
+    Object.keys(files).forEach(name=>{
+      const el = document.createElement('div');
+      el.className = 'vscode-file'+(name===current?' active':'');
+      el.textContent = name;
+      el.onclick = ()=>openFile(name);
+      filesEl.appendChild(el);
+    });
+  }
+  function renderTabs(){
+    tabsEl.innerHTML = `<div class="vscode-tab">${current}</div>`;
+  }
+  function openFile(name){
+    if(editor && current){
+      files[current].content = editor.getValue();
+    }
+    current = name;
+    const f = files[name];
+    if(editor){
+      editor.setValue(f.content);
+      monaco.editor.setModelLanguage(editor.getModel(), f.lang);
+    }
+    langEl.textContent = f.lang;
+    renderFiles(); renderTabs();
+  }
+
   function init(){
     require.config({paths:{vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}});
     require(['vs/editor/editor.main'],()=>{
-      const editor=monaco.editor.create(mount,{
-        value:`// VoidCode — VS Code style editor\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('developer'));\n`,
-        language:'javascript', theme:'vs-dark', automaticLayout:true,
-        fontSize:14, fontFamily:"'JetBrains Mono', monospace",
-        minimap:{enabled:true}, scrollBeyondLastLine:false, padding:{top:8}
+      editor = monaco.editor.create(container.querySelector(`#monaco-${winId}`),{
+        value: files[current].content,
+        language: files[current].lang,
+        theme: 'vs-dark',
+        automaticLayout: true,
+        fontSize: 14,
+        fontFamily: "'JetBrains Mono', monospace",
+        minimap: { enabled: !isMobile() },
+        scrollBeyondLastLine: false,
+        padding: { top: 8 },
+        wordWrap: isMobile() ? 'on' : 'off'
       });
-      monacoEditors.set(winId,editor);
+      monacoEditors.set(winId, editor);
+      editor.onDidChangeCursorPosition(e=>{
+        posEl.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+      });
+      container.querySelector('#vc-run').onclick = ()=>{
+        if(files[current].lang !== 'javascript'){ alert('Run only works for JavaScript'); return; }
+        try{
+          const result = eval(editor.getValue());
+          console.log('VoidCode:', result);
+          alert('Ran successfully. Check console for output.');
+        }catch(err){ alert('Error: '+err.message); }
+      };
     });
   }
-  if(window.require) init(); else setTimeout(init,400);
+  renderFiles(); renderTabs();
+  if(window.require) init(); else setTimeout(init, 400);
 }
 
+/* ===== Terminal ===== */
 function createTerminal(container){
   container.innerHTML=`<div class="terminal">
     <div class="terminal-output" id="term-out"></div>
@@ -311,64 +559,35 @@ function createTerminal(container){
 }
 
 function createFiles(container){
-  let files=LS.get('files',[{
-    name:'Welcome.txt', type:'file', content:'Welcome to Void OS Files!\nThis is a simple local file system.'
-  },{name:'Projects',type:'folder'}]);
-  container.innerHTML=`<div class="fm">
-    <div class="fm-sidebar">
-      <button class="active">📁 Home</button>
-      <button>📄 Documents</button>
-      <button>🖼 Pictures</button>
-    </div>
-    <div class="fm-main">
-      <div class="fm-toolbar">
-        <button id="fm-new-file">+ File</button>
-        <button id="fm-new-folder">+ Folder</button>
-      </div>
-      <div class="fm-list" id="fm-list"></div>
-    </div></div>`;
+  let files=LS.get('files',[{name:'Welcome.txt',type:'file',content:'Welcome to Void OS Files!'},{name:'Projects',type:'folder'}]);
+  container.innerHTML=`<div class="fm"><div class="fm-sidebar"><button class="active">📁 Home</button></div>
+    <div class="fm-main"><div class="fm-toolbar"><button id="fm-new-file">+ File</button><button id="fm-new-folder">+ Folder</button></div>
+    <div class="fm-list" id="fm-list"></div></div></div>`;
   const list=container.querySelector('#fm-list');
   function render(){
     list.innerHTML='';
-    files.forEach((f)=>{
-      const el=document.createElement('div');
-      el.className='fm-item';
+    files.forEach(f=>{
+      const el=document.createElement('div'); el.className='fm-item';
       el.innerHTML=`<div class="icon">${f.type==='folder'?'📁':'📄'}</div><span>${f.name}</span>`;
       el.ondblclick=()=>{ if(f.type==='file') alert(f.content||'(empty)'); };
       list.appendChild(el);
     });
     LS.set('files',files);
   }
-  container.querySelector('#fm-new-file').onclick=()=>{
-    const name=prompt('File name:'); if(!name) return;
-    files.push({name,type:'file',content:''}); render();
-  };
-  container.querySelector('#fm-new-folder').onclick=()=>{
-    const name=prompt('Folder name:'); if(!name) return;
-    files.push({name,type:'folder'}); render();
-  };
+  container.querySelector('#fm-new-file').onclick=()=>{ const name=prompt('File name:'); if(!name) return; files.push({name,type:'file',content:''}); render(); };
+  container.querySelector('#fm-new-folder').onclick=()=>{ const name=prompt('Folder name:'); if(!name) return; files.push({name,type:'folder'}); render(); };
   render();
 }
 
 function createNotes(container){
-  let notes=LS.get('notes',[{id:1,title:'Welcome',body:'This is your first note in Void OS.\n\nNotes are saved locally in your browser.'}]);
+  let notes=LS.get('notes',[{id:1,title:'Welcome',body:'This is your first note in Void OS.\n\nNotes are saved locally.'}]);
   let current=notes[0]?.id||null;
-  container.innerHTML=`<div class="notes">
-    <div class="notes-sidebar">
-      <div class="notes-sidebar-header"><span>Notes</span><button id="note-new">+</button></div>
-      <div class="notes-list" id="notes-list"></div>
-    </div>
-    <div class="notes-editor">
-      <input class="notes-title" id="note-title" placeholder="Title"/>
-      <textarea class="notes-body" id="note-body" placeholder="Start writing..."></textarea>
-    </div></div>`;
+  container.innerHTML=`<div class="notes"><div class="notes-sidebar"><div class="notes-sidebar-header"><span>Notes</span><button id="note-new">+</button></div><div class="notes-list" id="notes-list"></div></div>
+    <div class="notes-editor"><input class="notes-title" id="note-title" placeholder="Title"/><textarea class="notes-body" id="note-body" placeholder="Start writing..."></textarea></div></div>`;
   const list=container.querySelector('#notes-list');
   const titleEl=container.querySelector('#note-title');
   const bodyEl=container.querySelector('#note-body');
-  function save(){
-    const n=notes.find(x=>x.id===current);
-    if(n){ n.title=titleEl.value; n.body=bodyEl.value; LS.set('notes',notes); renderList(); }
-  }
+  function save(){ const n=notes.find(x=>x.id===current); if(n){ n.title=titleEl.value; n.body=bodyEl.value; LS.set('notes',notes); renderList(); } }
   function renderList(){
     list.innerHTML='';
     notes.forEach(n=>{
@@ -379,12 +598,7 @@ function createNotes(container){
       list.appendChild(el);
     });
   }
-  container.querySelector('#note-new').onclick=()=>{
-    const id=Date.now();
-    notes.unshift({id,title:'New Note',body:''});
-    current=id; titleEl.value='New Note'; bodyEl.value='';
-    LS.set('notes',notes); renderList();
-  };
+  container.querySelector('#note-new').onclick=()=>{ const id=Date.now(); notes.unshift({id,title:'New Note',body:''}); current=id; titleEl.value='New Note'; bodyEl.value=''; LS.set('notes',notes); renderList(); };
   titleEl.oninput=save; bodyEl.oninput=save;
   if(current){ const n=notes.find(x=>x.id===current); titleEl.value=n.title; bodyEl.value=n.body; }
   renderList();
@@ -392,45 +606,30 @@ function createNotes(container){
 
 function createStore(container){
   const catalog=[
-    {id:'browser',name:'Void Browser',desc:'Real proxy-powered browser',icon:ICONS.browser},
-    {id:'voidcode',name:'VoidCode',desc:'VS Code style editor with Monaco',icon:ICONS.voidcode},
-    {id:'terminal',name:'Terminal',desc:'Command line for Void OS',icon:ICONS.terminal},
-    {id:'files',name:'Files',desc:'Simple local file manager',icon:ICONS.files},
-    {id:'notes',name:'Notes',desc:'Quick notes with local save',icon:ICONS.notes},
-    {id:'settings',name:'Settings',desc:'System preferences',icon:ICONS.settings}
+    {id:'browser',name:'Void Browser',desc:'Tabbed proxy browser',icon:ICONS.browser},
+    {id:'voidcode',name:'VoidCode',desc:'VS Code style editor',icon:ICONS.voidcode},
+    {id:'terminal',name:'Terminal',desc:'Command line',icon:ICONS.terminal},
+    {id:'files',name:'Files',desc:'Local file manager',icon:ICONS.files},
+    {id:'notes',name:'Notes',desc:'Quick notes',icon:ICONS.notes},
+    {id:'settings',name:'Settings',desc:'Preferences',icon:ICONS.settings}
   ];
-  container.innerHTML=`<div class="store">
-    <h2>TycoreStore</h2>
-    <p class="store-sub">Apps for Void OS — all run locally in your browser</p>
-    <div class="store-grid" id="store-grid"></div></div>`;
+  container.innerHTML=`<div class="store"><h2>TycoreStore</h2><p class="store-sub">Apps for Void OS</p><div class="store-grid" id="store-grid"></div></div>`;
   const grid=container.querySelector('#store-grid');
   catalog.forEach(app=>{
-    const card=document.createElement('div');
-    card.className='store-card';
-    card.innerHTML=`<div class="icon">${iconImg(app.icon)}</div>
-      <div class="name">${app.name}</div>
-      <div class="desc">${app.desc}</div>
-      <button data-id="${app.id}">Open</button>`;
+    const card=document.createElement('div'); card.className='store-card';
+    card.innerHTML=`<div class="icon">${iconImg(app.icon)}</div><div class="name">${app.name}</div><div class="desc">${app.desc}</div><button>Open</button>`;
     card.querySelector('button').onclick=()=>openApp(app.id);
     grid.appendChild(card);
   });
 }
 
 function createSettings(container){
-  container.innerHTML=`<div class="app-content"><h2>Settings</h2>
-    <div class="card"><label><input type="checkbox" checked/> Window animations</label></div>
-    <div class="card"><p style="margin:0">Everything runs locally. No server storage yet.</p></div></div>`;
+  container.innerHTML=`<div class="app-content"><h2>Settings</h2><div class="card"><label><input type="checkbox" checked/> Window animations</label></div><div class="card"><p style="margin:0">Everything runs locally.</p></div></div>`;
 }
 function createAbout(container){
-  container.innerHTML=`<div class="app-content"><h2>Void OS</h2>
-    <p>A complete desktop environment in your browser.</p>
-    <div class="card"><strong>Apps</strong>
-      <ul style="margin:8px 0 0 18px;color:var(--text-dim);font-size:13px;line-height:1.7">
-        <li>Void Browser — proxy browser</li>
-        <li>VoidCode — VS Code style editor</li>
-        <li>Terminal, Files, Notes</li>
-        <li>TycoreStore</li>
-      </ul></div>
+  container.innerHTML=`<div class="app-content"><h2>Void OS</h2><p>A complete desktop environment in your browser.</p>
+    <div class="card"><strong>Apps</strong><ul style="margin:8px 0 0 18px;color:var(--text-dim);font-size:13px;line-height:1.7">
+      <li>Void Browser — tabbed proxy browser</li><li>VoidCode — VS Code style editor</li><li>Terminal, Files, Notes, TycoreStore</li></ul></div>
     <p style="font-size:12px;color:var(--text-dim);margin-top:16px">github.com/Tvmanisback/Void</p></div>`;
 }
 
