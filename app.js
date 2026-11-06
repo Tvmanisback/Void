@@ -250,7 +250,7 @@
         const startL = el.offsetLeft, startT = el.offsetTop;
 
         function onMove(ev) {
-          let w = startW, h = startH, l = startL, t = indet;
+          let w = startW, h = startH, l = startL, t = startT;
           const dx = ev.clientX - startX, dy = ev.clientY - startY;
           if (dir.includes('e')) w = Math.max(320, startW + dx);
           if (dir.includes('s')) h = Math.max(220, startH + dy);
