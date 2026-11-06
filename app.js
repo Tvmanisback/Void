@@ -250,6 +250,14 @@ function openApp(appId){
   el.querySelectorAll('.ctrl').forEach(control=>{
     control.addEventListener('pointerdown', event=>event.stopPropagation());
   });
+  // Explicitly focus editable controls on touch devices. Some mobile browsers
+  // do not focus nested controls reliably after a window receives pointer events.
+  el.addEventListener('pointerdown', event=>{
+    const field=event.target.closest('input, textarea, select, [contenteditable="true"]');
+    if(!field || !el.contains(field)) return;
+    event.stopPropagation();
+    try{ field.focus({preventScroll:true}); }catch{ field.focus(); }
+  }, true);
   el.addEventListener('pointerdown', event=>{
     if(!event.target.closest('.ctrl')) focusWindow(id);
   });
@@ -451,6 +459,7 @@ function createBrowser(container){
     input.value = t.url || '';
     if(t.url){
       status.textContent = 'Loading…';
+      armLoadWatchdog(t.url);
       iframe.src = buildProxyUrl(t.url);
     } else {
       showStartPage();
@@ -504,6 +513,7 @@ function createBrowser(container){
 
     const t = getTab();
     status.textContent = 'Loading…';
+    armLoadWatchdog(url);
     iframe.src = buildProxyUrl(url);
     t.url = url;
     t.title = url.replace(/^https?:\/\//,'').split('/')[0] || 'Tab';
@@ -536,7 +546,20 @@ function createBrowser(container){
     else showStartPage();
   };
   container.querySelector('.new-tab-btn').onclick = newTab;
-  iframe.onload = ()=>{ status.textContent = getTab()?.url ? 'Loaded' : 'Start'; };
+  let loadWatchdog=null;
+  function armLoadWatchdog(targetUrl){
+    if(loadWatchdog) clearTimeout(loadWatchdog);
+    loadWatchdog=setTimeout(()=>{
+      const current=getTab();
+      if(current && current.url===targetUrl && status.textContent==='Loading…'){
+        status.textContent='Still loading — proxy may be unavailable';
+      }
+    },15000);
+  }
+  iframe.onload = ()=>{
+    if(loadWatchdog) clearTimeout(loadWatchdog);
+    status.textContent = getTab()?.url ? 'Loaded' : 'Start';
+  };
 
   // Only accept navigation requests from this browser window's own start page.
   // Without the source check, every open Void Browser window reacts to the same message.
