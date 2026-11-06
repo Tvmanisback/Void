@@ -513,11 +513,15 @@ function createBrowser(container){
   container.querySelector('.new-tab-btn').onclick = newTab;
   iframe.onload = ()=>{ status.textContent = getTab()?.url ? 'Loaded' : 'Start'; };
 
-  window.addEventListener('message', (e)=>{
+  // Only accept navigation requests from this browser window's own start page.
+  // Without the source check, every open Void Browser window reacts to the same message.
+  const handleBrowserMessage = (e)=>{
+    if(e.source !== iframe.contentWindow) return;
     if(e.data && e.data.type==='void-navigate'){
       navigate(e.data.url);
     }
-  });
+  };
+  window.addEventListener('message', handleBrowserMessage);
 
   renderTabs();
   showStartPage();
