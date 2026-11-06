@@ -308,12 +308,15 @@ function makeDraggable(el){
 }
 function makeResizable(el){
   el.querySelectorAll('.resize-handle').forEach(handle=>{
-    handle.addEventListener('mousedown',e=>{
-      if(el.classList.contains('maximized')) return;
-      e.preventDefault(); e.stopPropagation();
+    handle.addEventListener('pointerdown',event=>{
+      if(el.classList.contains('maximized') || event.button!==0) return;
+      event.preventDefault(); event.stopPropagation();
       const dir=handle.className.split(' ')[1];
-      const sx=e.clientX,sy=e.clientY,sw=el.offsetWidth,sh=el.offsetHeight,sl=el.offsetLeft,st=el.offsetTop;
+      const sx=event.clientX,sy=event.clientY,sw=el.offsetWidth,sh=el.offsetHeight,sl=el.offsetLeft,st=el.offsetTop;
+      const pointerId=event.pointerId;
+      try{handle.setPointerCapture(pointerId);}catch{}
       function move(ev){
+        if(ev.pointerId!==pointerId) return;
         let w=sw,h=sh,l=sl,t=st;
         const dx=ev.clientX-sx,dy=ev.clientY-sy;
         if(dir.includes('e')) w=Math.max(280,sw+dx);
@@ -322,8 +325,15 @@ function makeResizable(el){
         if(dir.includes('n')){ h=Math.max(200,sh-dy); t=st+(sh-h); }
         el.style.width=w+'px'; el.style.height=h+'px'; el.style.left=l+'px'; el.style.top=t+'px';
       }
-      function up(){ window.removeEventListener('mousemove',move); window.removeEventListener('mouseup',up); }
-      window.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
+      function stop(ev){
+        if(ev.pointerId!==pointerId) return;
+        handle.removeEventListener('pointermove',move);
+        handle.removeEventListener('pointerup',stop);
+        handle.removeEventListener('pointercancel',stop);
+      }
+      handle.addEventListener('pointermove',move);
+      handle.addEventListener('pointerup',stop);
+      handle.addEventListener('pointercancel',stop);
     });
   });
 }
