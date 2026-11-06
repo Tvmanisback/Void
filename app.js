@@ -39,19 +39,40 @@ const LS = {
 
 const isMobile = () => window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-window.addEventListener('DOMContentLoaded', () => {
+function bootVoidOS(){
+  // The script can be loaded after DOMContentLoaded (for example, from a cached
+  // or dynamically inserted page). In that case an event listener would never run.
+  const bootScreen = document.getElementById('boot-screen');
+  const desktop = document.getElementById('desktop');
+  if(!bootScreen || !desktop || bootVoidOS.started) return;
+  bootVoidOS.started = true;
+
   setTimeout(() => {
-    document.getElementById('boot-screen').classList.add('fade');
+    bootScreen.classList.add('fade');
     setTimeout(() => {
-      document.getElementById('boot-screen').classList.add('hidden');
-      document.getElementById('desktop').classList.remove('hidden');
-      initDesktop();
-      initStartMenu();
-      startClock();
-      if(!isMobile()) openApp('about');
+      bootScreen.classList.add('hidden');
+      desktop.classList.remove('hidden');
+      try {
+        initDesktop();
+        initStartMenu();
+        startClock();
+        if(!isMobile()) openApp('about');
+      } catch(error) {
+        console.error('Void OS startup failed:', error);
+        const message = document.createElement('div');
+        message.style.cssText = 'position:fixed;inset:12px 12px 60px;z-index:2000;padding:18px;background:#241018;color:#fff;border:1px solid #ef4444;border-radius:12px;font:14px/1.5 system-ui;overflow:auto';
+        message.textContent = 'Void OS could not finish starting. Reload the page and check the browser console for details. Error: ' + (error && error.message ? error.message : String(error));
+        desktop.appendChild(message);
+      }
     }, 450);
   }, 1400);
-});
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', bootVoidOS, {once:true});
+} else {
+  bootVoidOS();
+}
 
 function initDesktop(){
   const c = document.getElementById('desktop-icons');
