@@ -41,7 +41,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "16kb" }));
-app.use("/api", rateLimit({ windowMs: 60_000, limit: 45, standardHeaders: "draft-8", legacyHeaders: false }));
+app.use("/api", rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: "draft-8", legacyHeaders: false }));
 
 // Use Railway's standard Ubuntu sandbox image. Node.js is preinstalled;
 // Python and Lua are installed after the VM starts, outside template builds.
