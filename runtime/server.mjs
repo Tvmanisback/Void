@@ -66,7 +66,7 @@ async function authenticate(req, res, next) {
 async function getUserSandbox(userId) {
   const { data: saved, error: readError } = await admin
     .from("void_runtime_sessions")
-    .select("sandbox_id")
+    .select("sandbox_id, checkpoint_name")
     .eq("user_id", userId)
     .maybeSingle();
   if (readError) throw new Error("Could not load your runtime session. Check the Supabase runtime table.");
