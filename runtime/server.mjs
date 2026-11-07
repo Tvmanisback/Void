@@ -41,9 +41,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "16kb" }));
 app.use("/api", rateLimit({ windowMs: 60_000, limit: 45, standardHeaders: "draft-8", legacyHeaders: false }));
 
-const template = Sandbox.template()
-  .withPackages("python3", "lua5.4")
-  .workdir("/app");
+const template = Sandbox.template().workdir("/app");
 
 const queues = new Map();
 async function forUser(userId, task) {
@@ -84,16 +82,31 @@ async function getUserSandbox(userId) {
   }
 
   let sandbox;
+  let needsLanguageSetup = false;
   if (saved?.checkpoint_name) {
     try {
       sandbox = await Sandbox.create(checkpointName, { idleTimeoutMinutes: 5 });
     } catch {
-      // No usable checkpoint exists yet; start with the prepared language template.
+      // If the checkpoint is unavailable, start from Railway's standard base image.
       sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
+      needsLanguageSetup = true;
     }
   } else {
     sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
+    needsLanguageSetup = true;
   }
+
+  if (needsLanguageSetup) {
+    const setup = await sandbox.exec(
+      "apt-get update && apt-get install -y python3 lua5.4 && ln -sf /usr/bin/python3 /usr/local/bin/python && ln -sf /usr/bin/lua5.4 /usr/local/bin/lua",
+      { cwd: "/app", timeoutSec: 180, maxOutputBytes: 12000 }
+    );
+    if (setup.exitCode !== 0) {
+      await sandbox.destroy().catch(() => {});
+      throw new Error("The base sandbox started, but installing Python and Lua failed: " + (setup.stderr || setup.stdout || "unknown package installation error"));
+    }
+  }
+
   const { error: saveError } = await admin.from("void_runtime_sessions").upsert({
     user_id: userId,
     sandbox_id: sandbox.id,
