@@ -199,7 +199,7 @@ app.post("/api/browser/navigate", authenticate, async (req, res) => {
   try {
     const result = await withBrowserLock(req.voidUser.id, async () => {
       const session = await getBrowserSession(req.voidUser.id);
-      return browserNavigate(session, url);
+      return browserNavigate(session, url, req.body?.tabId || "1");
     });
     res.json({ ok: true, ...result, width: 1365, height: 850 });
   } catch (error) {
