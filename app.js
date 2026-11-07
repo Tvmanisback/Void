@@ -542,7 +542,22 @@ function createSettings(container){
 }
 
 function createAbout(container){
-  container.innerHTML='<div class="app-content"><h2>Void OS</h2><p>A complete desktop environment in your browser.</p><p style="font-size:12px;color:var(--text-dim);margin-top:16px">github.com/Tvmanisback/Void</p></div>';
+  container.innerHTML=`
+    <div class="app-content" style="height:100%;overflow:auto">
+      <h2>About Void</h2>
+      <p>A complete desktop environment in your browser.</p>
+      <section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)">
+        <h3 style="margin:0 0 10px">What's new in this update</h3>
+        <ul style="padding-left:20px;margin:0;line-height:1.7">
+          <li><strong>Browser:</strong> rebuilt page loading to use your configured CORS proxy, while keeping your existing proxy key.</li>
+          <li><strong>Sign-in:</strong> removed Guest access. Sign in or create an account to use Void.</li>
+          <li><strong>Terminal:</strong> connected runtime support, including Python.</li>
+          <li><strong>Stability:</strong> improved browser navigation, tabs, and loading feedback.</li>
+        </ul>
+      </section>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p>
+      <p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p>
+    </div>`;
 }
 
 window.VoidOS={openApp,APPS};
