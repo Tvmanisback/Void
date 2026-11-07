@@ -408,195 +408,105 @@ document.querySelectorAll('[data-url]').forEach(function(a){
 
 /* ===== Browser with Tabs ===== */
 function createBrowser(container){
-  let tabs = [{ id:1, title:'New Tab', url:null, history:[], histIndex:-1 }];
-  let activeTab = 1;
-  let nextId = 2;
-
-  container.innerHTML = `
+  let tabs=[{id:1,title:'New Tab',url:null,history:[],histIndex:-1}],activeTab=1,nextId=2,requestId=0,activeController=null;
+  container.innerHTML=`
   <div class="browser" style="display:flex;flex-direction:column;height:100%">
     <div class="browser-tabs" id="browser-tabs"></div>
     <div class="browser-toolbar">
-      <button class="back-btn" title="Back">←</button>
-      <button class="fwd-btn" title="Forward">→</button>
-      <button class="reload-btn" title="Reload">↻</button>
-      <form class="url-form" style="flex:1;display:flex;gap:6px">
-        <input class="url-input" type="text" placeholder="Search or enter URL" spellcheck="false"/>
-        <button type="submit" class="go-btn">Go</button>
-      </form>
-      <button class="new-tab-btn" title="New Tab">+</button>
+      <button class="back-btn" type="button" title="Back">←</button><button class="fwd-btn" type="button" title="Forward">→</button><button class="reload-btn" type="button" title="Reload">↻</button>
+      <form class="url-form" style="flex:1;display:flex;gap:6px"><input class="url-input" type="text" placeholder="Search or enter URL" spellcheck="false" autocomplete="off"/><button type="submit" class="go-btn">Go</button></form>
+      <button class="new-tab-btn" type="button" title="New Tab">+</button>
     </div>
-    <div style="flex:1;position:relative;min-height:0">
-      <iframe class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" referrerpolicy="no-referrer"></iframe>
-    </div>
+    <div style="flex:1;position:relative;min-height:0"><iframe class="browser-frame" title="Web page" sandbox="allow-scripts allow-forms allow-popups allow-modals" referrerpolicy="no-referrer" style="width:100%;height:100%;border:0;background:#fff"></iframe></div>
     <div class="browser-status"><span class="status-text">Ready</span></div>
   </div>`;
-
-  const tabsEl = container.querySelector('#browser-tabs');
-  const iframe = container.querySelector('.browser-frame');
-  const input = container.querySelector('.url-input');
-  const form = container.querySelector('.url-form');
-  const status = container.querySelector('.status-text');
-
-  function getTab(){ return tabs.find(t=>t.id===activeTab); }
-
+  const tabsEl=container.querySelector('#browser-tabs'),iframe=container.querySelector('.browser-frame'),input=container.querySelector('.url-input'),form=container.querySelector('.url-form'),status=container.querySelector('.status-text');
+  const getTab=()=>tabs.find(t=>t.id===activeTab);
   function renderTabs(){
-    tabsEl.innerHTML = '';
+    tabsEl.innerHTML='';
     tabs.forEach(t=>{
-      const el = document.createElement('div');
-      el.className = 'browser-tab'+(t.id===activeTab?' active':'');
-      el.innerHTML = `<span class="tab-title">${t.title}</span><button class="tab-close" data-id="${t.id}">×</button>`;
-      bindActivation(el, (e)=>{
-        if(e.target.closest('.tab-close')) return;
-        switchTab(t.id);
-      });
-      bindActivation(el.querySelector('.tab-close'), (e)=>{
-        e.stopPropagation();
-        closeTab(t.id);
-      });
+      const el=document.createElement('div');el.className='browser-tab'+(t.id===activeTab?' active':'');
+      const title=document.createElement('span');title.className='tab-title';title.textContent=t.title;
+      const close=document.createElement('button');close.type='button';close.className='tab-close';close.textContent='×';
+      el.append(title,close);
+      bindActivation(el,e=>{if(!e.target.closest('.tab-close'))switchTab(t.id);});
+      bindActivation(close,e=>{e.stopPropagation();closeTab(t.id);});
       tabsEl.appendChild(el);
     });
   }
-
-  function switchTab(id){
-    activeTab = id;
-    const t = getTab();
-    input.value = t.url || '';
-    if(t.url){
-      status.textContent = 'Loading…';
-      armLoadWatchdog(t.url);
-      iframe.src = buildProxyUrl(t.url);
-    } else {
-      showStartPage();
-    }
-    renderTabs();
-    updateNav();
-  }
-
+  function updateNav(){const t=getTab();container.querySelector('.back-btn').disabled=!t||t.histIndex<=0;container.querySelector('.fwd-btn').disabled=!t||t.histIndex>=t.history.length-1;}
+  function showStartPage(){if(activeController)activeController.abort();status.textContent='Start';iframe.removeAttribute('src');iframe.srcdoc=getStartPageHTML();}
+  function switchTab(id){activeTab=id;const t=getTab();if(!t)return;input.value=t.url||'';if(t.url)loadPage(t.url);else showStartPage();renderTabs();updateNav();}
   function closeTab(id){
-    if(tabs.length===1){
-      tabs[0] = { id:tabs[0].id, title:'New Tab', url:null, history:[], histIndex:-1 };
-      showStartPage();
-      input.value = '';
-      renderTabs();
-      return;
+    if(tabs.length===1){tabs[0]={id:tabs[0].id,title:'New Tab',url:null,history:[],histIndex:-1};showStartPage();input.value='';renderTabs();updateNav();return;}
+    const idx=tabs.findIndex(t=>t.id===id);tabs.splice(idx,1);
+    if(activeTab===id){activeTab=tabs[Math.max(0,idx-1)].id;switchTab(activeTab);}else renderTabs();
+  }
+  function newTab(){const t={id:nextId++,title:'New Tab',url:null,history:[],histIndex:-1};tabs.push(t);activeTab=t.id;showStartPage();input.value='';renderTabs();updateNav();}
+  function normalizeUrl(raw){
+    let value=(raw||'').trim();if(!value)return null;
+    if(value.slice(0,8).toLowerCase()!=='https://'&&value.slice(0,7).toLowerCase()!=='http://'){
+      if(value.includes('.')&&!value.includes(' '))value='https://'+value;
+      else value='https://duckduckgo.com/?q='+encodeURIComponent(value);
     }
-    const idx = tabs.findIndex(t=>t.id===id);
-    tabs.splice(idx,1);
-    if(activeTab===id){
-      activeTab = tabs[Math.max(0,idx-1)].id;
-      switchTab(activeTab);
-    } else renderTabs();
+    try{const parsed=new URL(value);if(parsed.protocol!=='http:'&&parsed.protocol!=='https:')return null;return parsed.href;}catch{return null;}
   }
-
-  function newTab(){
-    const t = { id:nextId++, title:'New Tab', url:null, history:[], histIndex:-1 };
-    tabs.push(t);
-    activeTab = t.id;
-    showStartPage();
-    input.value = '';
-    renderTabs();
-    updateNav();
+  function navigate(raw,push=true){
+    const url=normalizeUrl(raw);if(!url){status.textContent='Enter a valid website address';return;}
+    const t=getTab();if(!t)return;t.url=url;
+    t.title=new URL(url).hostname.split('.').slice(-2).join('.');
+    if(push){t.history.splice(t.histIndex+1);t.history.push(url);t.histIndex=t.history.length-1;}
+    input.value=url;renderTabs();updateNav();loadPage(url);
   }
-
-  function showStartPage(){
-    status.textContent = 'Start';
-    iframe.removeAttribute('src');
-    iframe.srcdoc = getStartPageHTML();
-  }
-
-  function navigate(raw, push=true){
-    let url = (raw||'').trim();
-    if(!url){ showStartPage(); return; }
-
-    if(!/^https?:\/\//i.test(url)){
-      if(url.includes('.') && !url.includes(' ')) url = 'https://' + url;
-      else url = 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
+  function switchHistory(delta){const t=getTab();if(!t)return;const next=t.histIndex+delta;if(next<0||next>=t.history.length)return;t.histIndex=next;navigate(t.history[next],false);}
+  async function loadPage(url){
+    if(activeController)activeController.abort();
+    const controller=new AbortController();activeController=controller;const thisRequest=++requestId;
+    status.textContent='Connecting to CORS proxy…';iframe.removeAttribute('src');iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px">Loading page…</body></html>';
+    let lastError=null;
+    for(let index=0;index<PROXY_LIST.length;index++){
+      if(controller.signal.aborted)return;
+      status.textContent=index===0?'Fetching page through CORS proxy…':'Retrying with proxy '+(index+1)+'…';
+      try{
+        const response=await fetch(PROXY_LIST[index](url),{method:'GET',mode:'cors',credentials:'omit',redirect:'follow',signal:controller.signal,headers:{'Accept':'text/html,application/xhtml+xml,*/*'}});
+        if(!response.ok)throw new Error('Proxy returned HTTP '+response.status);
+        const html=await response.text();if(!html||html.length<20)throw new Error('Proxy returned an empty page');
+        if(thisRequest!==requestId||controller.signal.aborted)return;
+        const doc=new DOMParser().parseFromString(html,'text/html');
+        doc.querySelectorAll('meta[http-equiv="Content-Security-Policy"],meta[http-equiv="X-Frame-Options"]').forEach(node=>node.remove());
+        let base=doc.querySelector('base');if(!base){base=doc.createElement('base');doc.head.prepend(base);}base.href=url;
+        const bridge=doc.createElement('script');
+        bridge.textContent=`(()=>{
+          const send=url=>parent.postMessage({type:'void-navigate',url:String(url)},'*');
+          document.addEventListener('click',event=>{
+            const link=event.target.closest&&event.target.closest('a[href]');if(!link)return;
+            const href=link.href;if(!href||href.startsWith('javascript:')||href.startsWith('mailto:')||href.startsWith('tel:'))return;
+            event.preventDefault();send(href);
+          },true);
+          document.addEventListener('submit',event=>{
+            const form=event.target;if(!(form instanceof HTMLFormElement))return;
+            if((form.method||'get').toLowerCase()==='get'){
+              event.preventDefault();const target=new URL(form.action||document.baseURI);
+              new FormData(form).forEach((value,key)=>target.searchParams.append(key,String(value)));send(target.href);
+            }
+          },true);
+        })();`;
+        doc.body.appendChild(bridge);
+        iframe.srcdoc='<!DOCTYPE html>\\n'+doc.documentElement.outerHTML;
+        status.textContent='Loaded via CORS proxy '+(index+1);return;
+      }catch(error){if(error.name==='AbortError')return;lastError=error;}
     }
-
-    const t = getTab();
-    status.textContent = 'Loading…';
-    armLoadWatchdog(url);
-    iframe.src = buildProxyUrl(url);
-    t.url = url;
-    t.title = url.replace(/^https?:\/\//,'').split('/')[0] || 'Tab';
-    if(push){
-      t.history.splice(t.histIndex+1);
-      t.history.push(url);
-      t.histIndex = t.history.length-1;
-    }
-    input.value = url;
-    renderTabs();
-    updateNav();
+    if(thisRequest!==requestId)return;
+    status.textContent='Could not load: '+(lastError&&lastError.message?lastError.message:'all proxies failed');
+    iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#333"><h2>Page could not be loaded</h2><p>The CORS proxies could not retrieve this website. Try another address or reload.</p></body></html>';
   }
-
-  function updateNav(){
-    const t = getTab();
-    container.querySelector('.back-btn').disabled = !t || t.histIndex <= 0;
-    container.querySelector('.fwd-btn').disabled = !t || t.histIndex >= t.history.length-1;
-  }
-
-  form.onsubmit = e=>{ e.preventDefault(); navigate(input.value); };
-
-  bindActivation(container.querySelector('.new-tab-btn'), newTab);
-  bindActivation(container.querySelector('.back-btn'), ()=>{
-    const t=getTab(); if(t && t.histIndex>0){ t.histIndex--; navigate(t.history[t.histIndex], false); }
-  });
-  bindActivation(container.querySelector('.fwd-btn'), ()=>{
-    const t=getTab(); if(t && t.histIndex<t.history.length-1){ t.histIndex++; navigate(t.history[t.histIndex], false); }
-  });
-  bindActivation(container.querySelector('.reload-btn'), ()=>{
-    const t=getTab();
-    if(t && t.url) navigate(t.url, false);
-    else showStartPage();
-  });
-  let loadWatchdog=null;
-  let loadAttempts=0;
-  function armLoadWatchdog(targetUrl){
-    if(loadWatchdog) clearTimeout(loadWatchdog);
-    loadAttempts = 0;
-    currentProxyIndex = 0;
-    loadWatchdog=setTimeout(()=>{
-      const current=getTab();
-      if(current && current.url===targetUrl && status.textContent==='Loading…'){
-        if(loadAttempts < PROXY_LIST.length - 1){
-          loadAttempts++;
-          nextProxy();
-          status.textContent = 'Trying another proxy…';
-          iframe.src = buildProxyUrl(targetUrl);
-          armLoadWatchdog(targetUrl);
-        } else {
-          status.textContent = 'Failed — proxy unavailable. Try again.';
-        }
-      }
-    },12000);
-  }
-  iframe.onload = ()=>{
-    if(loadWatchdog) clearTimeout(loadWatchdog);
-    status.textContent = getTab()?.url ? 'Loaded' : 'Start';
-  };
-  iframe.onerror = ()=>{
-    const current=getTab();
-    if(current && current.url && loadAttempts < PROXY_LIST.length - 1){
-      loadAttempts++;
-      nextProxy();
-      status.textContent = 'Trying another proxy…';
-      iframe.src = buildProxyUrl(current.url);
-      armLoadWatchdog(current.url);
-    } else {
-      status.textContent = 'Failed to load';
-    }
-  };
-
-  const handleBrowserMessage = (e)=>{
-    if(e.source !== iframe.contentWindow) return;
-    if(e.data && e.data.type==='void-navigate'){
-      navigate(e.data.url);
-    }
-  };
-  window.addEventListener('message', handleBrowserMessage);
-
-  renderTabs();
-  showStartPage();
+  form.addEventListener('submit',e=>{e.preventDefault();navigate(input.value);});
+  bindActivation(container.querySelector('.new-tab-btn'),newTab);
+  bindActivation(container.querySelector('.back-btn'),()=>switchHistory(-1));
+  bindActivation(container.querySelector('.fwd-btn'),()=>switchHistory(1));
+  bindActivation(container.querySelector('.reload-btn'),()=>{const t=getTab();if(t&&t.url)loadPage(t.url);else showStartPage();});
+  window.addEventListener('message',e=>{if(e.source===iframe.contentWindow&&e.data&&e.data.type==='void-navigate')navigate(e.data.url);});
+  renderTabs();showStartPage();updateNav();
 }
 
 /* ===== VoidCode ===== */
