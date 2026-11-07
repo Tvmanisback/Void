@@ -9,7 +9,12 @@
     if (client) return client;
     const config = window.VOID_SUPABASE_CONFIG || {};
     if (!config.url || !config.anonKey || !window.supabase?.createClient) return null;
-    client = window.supabase.createClient(config.url, config.anonKey);
+    try {
+      client = window.supabase.createClient(config.url, config.anonKey);
+    } catch (e) {
+      console.error('Supabase client create failed:', e);
+      return null;
+    }
     return client;
   }
 
@@ -18,6 +23,11 @@
     if (!element) return;
     element.textContent = message;
     element.className = 'auth-message' + (type ? ' ' + type : '');
+  }
+
+  function setConnectionStatus(html) {
+    const el = document.getElementById('auth-connection');
+    if (el) el.innerHTML = html;
   }
 
   function init(onAuthenticated) {
@@ -29,14 +39,19 @@
     const nameWrap = document.getElementById('auth-name-wrap');
     const submit = document.getElementById('auth-submit');
     const authScreen = document.getElementById('auth-screen');
+    const guestBtn = document.getElementById('auth-guest');
     if (!form || !signInTab || !signUpTab || !authScreen) {
       throw new Error('Authentication screen elements are missing');
     }
 
+    // Always show auth UI quickly — never leave user on blank/checking forever
+    authScreen.classList.remove('hidden');
+
     const supabase = getClient();
     if (supabase) {
-      document.getElementById('auth-connection').innerHTML =
-        '<span class="connected"></span> Connected to Supabase';
+      setConnectionStatus('<span class="connected"></span> Connected to Supabase');
+    } else {
+      setConnectionStatus('<span></span> Offline mode — use Guest to continue');
     }
 
     let mode = 'signin';
@@ -59,11 +74,22 @@
     signInTab.addEventListener('click', () => setMode('signin'));
     signUpTab.addEventListener('click', () => setMode('signup'));
 
+    // Guest bypass — always works, no network required
+    if (guestBtn) {
+      guestBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        onAuthenticated({
+          email: 'guest@void.local',
+          user_metadata: { display_name: 'Guest' }
+        });
+      });
+    }
+
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const activeClient = getClient();
       if (!activeClient) {
-        showMessage('Sign-in is temporarily unavailable. Please try again later.', 'error');
+        showMessage('Sign-in unavailable. Click Continue as Guest instead.', 'error');
         return;
       }
 
@@ -97,26 +123,30 @@
       }
     });
 
-    if (!supabase) {
-      authScreen.classList.remove('hidden');
-      return;
-    }
+    if (!supabase) return;
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error('Supabase session restore failed:', error);
-      if (data?.session?.user) onAuthenticated(data.session.user);
-      else authScreen.classList.remove('hidden');
-    }).catch(error => {
-      console.error('Supabase session restore failed:', error);
-      authScreen.classList.remove('hidden');
-    });
+    // Session restore with timeout so we never hang on "Checking…"
+    const timeout = new Promise(resolve => setTimeout(() => resolve({ data: { session: null }, error: null }), 4000));
+    Promise.race([supabase.auth.getSession(), timeout])
+      .then(({ data, error }) => {
+        if (error) console.error('Supabase session restore failed:', error);
+        if (data?.session?.user) onAuthenticated(data.session.user);
+      })
+      .catch(error => {
+        console.error('Supabase session restore failed:', error);
+        setConnectionStatus('<span></span> Could not reach sign-in service — use Guest');
+      });
   }
 
   async function signOut() {
     const supabase = getClient();
     if (supabase) {
-      const { error } = await supabase.auth.signOut();
-      if (error) console.error('Supabase sign-out failed:', error);
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) console.error('Supabase sign-out failed:', error);
+      } catch (e) {
+        console.error(e);
+      }
     }
   }
 
