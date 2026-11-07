@@ -41,9 +41,8 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "16kb" }));
 app.use("/api", rateLimit({ windowMs: 60_000, limit: 45, standardHeaders: "draft-8", legacyHeaders: false }));
 
-const template = Sandbox.template()
-  .withPackages("python3", "lua5.4")
-  .workdir("/app");
+// Use Railway's standard Ubuntu sandbox image. Node.js is preinstalled;
+// Python and Lua are installed after the VM starts, outside template builds.
 
 const queues = new Map();
 async function forUser(userId, task) {
@@ -72,10 +71,34 @@ async function getUserSandbox(userId) {
     .maybeSingle();
   if (readError) throw new Error("Could not load your runtime session. Check the Supabase runtime table.");
 
-  const checkpointName = "void-user-v3-" + userId;
-  // Always create a fresh sandbox while diagnosing template failures.
-  // Do not reconnect to a possibly stale sandbox ID or restore an old checkpoint.
-  const sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
+  const checkpointName = "void-user-v4-" + userId;
+  let sandbox;
+  let restored = false;
+
+  if (saved?.checkpoint_name === checkpointName) {
+    try {
+      sandbox = await Sandbox.create(checkpointName, { idleTimeoutMinutes: 5 });
+      restored = true;
+    } catch (restoreError) {
+      console.warn("Could not restore the saved Void workspace; creating a fresh one:", restoreError?.message || restoreError);
+    }
+  }
+
+  if (!sandbox) {
+    sandbox = await Sandbox.create({ idleTimeoutMinutes: 5 });
+  }
+
+  if (!restored) {
+    const setup = await sandbox.exec(
+      "apt-get update && apt-get install -y python3 lua5.4",
+      { timeoutSec: 180 }
+    );
+    if (setup.exitCode !== 0) {
+      await sandbox.destroy().catch(() => {});
+      const details = (setup.stderr || setup.stdout || "Package installation failed.").slice(-1200);
+      throw new Error("Could not prepare Python and Lua in the runtime: " + details);
+    }
+  }
 
   const { error: saveError } = await admin.from("void_runtime_sessions").upsert({
     user_id: userId,
@@ -101,10 +124,10 @@ app.post("/api/exec", authenticate, async (req, res) => {
   try {
     const result = await forUser(req.voidUser.id, async () => {
       const sandbox = await getUserSandbox(req.voidUser.id);
-      const output = await sandbox.execHttp(command, {
+      const output = await sandbox.exec(command, {
         timeoutSec: 10
       });
-      const checkpointName = "void-user-" + req.voidUser.id;
+      const checkpointName = "void-user-v4-" + req.voidUser.id;
       await sandbox.checkpoint(checkpointName);
       const { error: checkpointSaveError } = await admin.from("void_runtime_sessions")
         .update({
