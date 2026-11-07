@@ -141,7 +141,7 @@ async function getBrowserSession(userId) {
     deviceScaleFactor: 1,
     acceptDownloads: true
   });
-  session = { browser, context, pages: new Map(), lastUsed: Date.now() };
+  session = { browser, context, pages: new Map(), downloads: new Map(), lastUsed: Date.now() };
   browserSessions.set(userId, session);
   browser.on("disconnected", () => {
     if (browserSessions.get(userId) === session) browserSessions.delete(userId);
@@ -161,6 +161,23 @@ async function getBrowserPage(session, tabId = "1") {
     return route.continue();
   });
   session.pages.set(key, page);
+  page.on("download", async download => {
+    try {
+      const stream = await download.createReadStream();
+      if (!stream) return;
+      const chunks = [];
+      let total = 0;
+      for await (const chunk of stream) {
+        total += chunk.length;
+        if (total > 50 * 1024 * 1024) { await download.cancel().catch(() => {}); return; }
+        chunks.push(chunk);
+      }
+      const id = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
+      session.downloads.set(id, { filename: download.suggestedFilename() || "download", buffer: Buffer.concat(chunks), sourceUrl: download.url() });
+    } catch (error) {
+      console.error("Void browser download capture failed:", error);
+    }
+  });
   page.on("close", () => { if (session.pages.get(key) === page) session.pages.delete(key); });
   return page;
 }
@@ -260,6 +277,23 @@ app.post("/api/browser/input", authenticate, async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message || "Browser input failed." });
   }
+});
+
+app.get("/api/browser/downloads", authenticate, (req, res) => {
+  const session = browserSessions.get(req.voidUser.id);
+  if (!session) return res.json({ downloads: [] });
+  res.json({ downloads: Array.from(session.downloads, ([id, item]) => ({ id, filename: item.filename, size: item.buffer.length })) });
+});
+
+app.get("/api/browser/downloads/:id", authenticate, (req, res) => {
+  const session = browserSessions.get(req.voidUser.id);
+  const item = session?.downloads?.get(req.params.id);
+  if (!item) return res.status(404).json({ error: "That browser download is no longer available." });
+  const safeName = String(item.filename).replace(/[\\r\\n"]/g, "_").slice(0, 180) || "download";
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Disposition", 'attachment; filename="' + safeName + '"');
+  res.send(item.buffer);
 });
 
 app.post("/api/browser/close", authenticate, async (req, res) => {
