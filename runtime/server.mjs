@@ -14,6 +14,8 @@ for (const key of required) {
   }
 }
 
+const RUNTIME_BUILD = "void-browser-input-route-20261107";
+
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const allowedOrigins = new Set([
@@ -280,9 +282,10 @@ app.post("/api/browser/input", authenticate, async (req, res) => {
       }
       session.lastUsed = Date.now();
     });
-    res.json({ ok: true });
+    res.json({ ok: true, build: RUNTIME_BUILD });
   } catch (error) {
-    res.status(400).json({ error: error.message || "Browser input failed." });
+    console.error("Void browser input failed:", error);
+    res.status(400).json({ error: error.message || "Browser input failed.", build: RUNTIME_BUILD });
   }
 });
 
@@ -322,7 +325,7 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, service: "void-runtime" }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, service: "void-runtime", build: RUNTIME_BUILD, browserInputRoute: true }));
 
 app.post("/api/exec", authenticate, async (req, res) => {
   const command = req.body?.command;
