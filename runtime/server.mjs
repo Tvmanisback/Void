@@ -97,9 +97,9 @@ async function getUserSandbox(userId) {
   }
 
   if (needsLanguageSetup) {
-    const setup = await sandbox.exec(
+    const setup = await sandbox.execHttp(
       "apt-get update && apt-get install -y python3 lua5.4 && ln -sf /usr/bin/python3 /usr/local/bin/python && ln -sf /usr/bin/lua5.4 /usr/local/bin/lua",
-      { cwd: "/app", timeoutSec: 180, maxOutputBytes: 12000 }
+      { timeoutSec: 120 }
     );
     if (setup.exitCode !== 0) {
       await sandbox.destroy().catch(() => {});
