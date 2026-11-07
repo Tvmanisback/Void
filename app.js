@@ -387,10 +387,10 @@ button:hover{filter:brightness(1.1)}
 <div class="tag">Search the web through the void</div>
 <form id="s"><input id="q" placeholder="Search or enter URL" autofocus autocomplete="off"/><button type="submit">Search</button></form>
 <div class="links">
-<a href="#" data-url="https://wikipedia.org">Wikipedia</a>
-<a href="#" data-url="https://github.com">GitHub</a>
-<a href="#" data-url="https://reddit.com">Reddit</a>
-<a href="#" data-url="https://youtube.com">YouTube</a>
+<a href="https://wikipedia.org" data-url="https://www.wikipedia.org/">Wikipedia</a>
+<a href="https://github.com" data-url="https://github.com/">GitHub</a>
+<a href="https://reddit.com" data-url="https://www.reddit.com/">Reddit</a>
+<a href="https://youtube.com" data-url="https://www.youtube.com/">YouTube</a>
 </div>
 <script>
 document.getElementById('s').onsubmit=function(e){
@@ -404,7 +404,14 @@ document.getElementById('s').onsubmit=function(e){
   }
 };
 document.querySelectorAll('[data-url]').forEach(function(a){
-  a.onclick=function(e){ e.preventDefault(); parent.postMessage({type:'void-navigate',url:a.dataset.url},'*'); };
+  a.addEventListener('click',function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    var target=new URL(a.getAttribute('data-url'),location.href);
+    if(target.protocol==='https:'||target.protocol==='http:'){
+      parent.postMessage({type:'void-navigate',url:target.href},'*');
+    }
+  },true);
 });
 </script></body></html>`;
 }
@@ -561,11 +568,11 @@ function createAbout(container){
       <section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)">
         <h3 style="margin:0 0 10px">What's new in this update</h3>
         <ul style="padding-left:20px;margin:0;line-height:1.7">
-          <li><strong>DuckDuckGo search:</strong> uses DuckDuckGo's lightweight HTML results page for better compatibility with the built-in browser.</li>
-          <li><strong>Browser controls:</strong> the Go button and Enter key submit searches, while website addresses open directly.</li>
-          <li><strong>Website loading:</strong> browser page requests use CORS proxy support.</li>
-          <li><strong>Accounts:</strong> sign in or create an account to use Void; Guest access is unavailable.</li>
+          <li><strong>Browser shortcuts:</strong> Wikipedia, GitHub, Reddit and YouTube now use explicit website addresses and send navigation requests to the built-in browser.</li>
+          <li><strong>DuckDuckGo search:</strong> uses the lightweight HTML results page for browser compatibility.</li>
+          <li><strong>Browser controls:</strong> Go and Enter submit searches, while website addresses open directly.</li>
           <li><strong>Terminal:</strong> runtime support is available, including Python.</li>
+          <li><strong>Accounts:</strong> sign in or create an account; Guest access is unavailable.</li>
         </ul>
       </section>
       <p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p>
