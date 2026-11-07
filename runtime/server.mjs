@@ -71,21 +71,32 @@ async function getUserSandbox(userId) {
     .maybeSingle();
   if (readError) throw new Error("Could not load your runtime session. Check the Supabase runtime table.");
 
+  const checkpointName = saved?.checkpoint_name || ("void-user-" + userId);
   if (saved?.sandbox_id) {
     try {
       const existing = await Sandbox.connect(saved.sandbox_id);
       const check = await existing.exec("pwd", { cwd: "/app", timeoutSec: 10, ephemeral: true });
       if (check.exitCode === 0) return existing;
     } catch {
-      // The sandbox may have expired. Replace the stale session below.
+      // The idle timeout may have destroyed the VM. Restore the last saved workspace.
     }
-    await admin.from("void_runtime_sessions").delete().eq("user_id", userId);
   }
 
-  const sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
+  let sandbox;
+  if (saved?.checkpoint_name) {
+    try {
+      sandbox = await Sandbox.create(checkpointName, { idleTimeoutMinutes: 5 });
+    } catch {
+      // No usable checkpoint exists yet; start with the prepared language template.
+      sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
+    }
+  } else {
+    sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
+  }
   const { error: saveError } = await admin.from("void_runtime_sessions").upsert({
     user_id: userId,
     sandbox_id: sandbox.id,
+    checkpoint_name: checkpointName,
     updated_at: new Date().toISOString()
   }, { onConflict: "user_id" });
   if (saveError) {
@@ -111,9 +122,16 @@ app.post("/api/exec", authenticate, async (req, res) => {
         timeoutSec: 120,
         maxOutputBytes: 16000
       });
-      await admin.from("void_runtime_sessions")
-        .update({ updated_at: new Date().toISOString() })
+      const checkpointName = "void-user-" + req.voidUser.id;
+      await sandbox.checkpoint(checkpointName);
+      const { error: checkpointSaveError } = await admin.from("void_runtime_sessions")
+        .update({
+          sandbox_id: sandbox.id,
+          checkpoint_name: checkpointName,
+          updated_at: new Date().toISOString()
+        })
         .eq("user_id", req.voidUser.id);
+      if (checkpointSaveError) throw new Error("Command ran, but the workspace checkpoint could not be saved.");
       return output;
     });
     res.json({
