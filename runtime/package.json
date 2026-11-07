@@ -1,0 +1,19 @@
+{
+  "name": "void-runtime-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.80.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "railway": "^3.16.0"
+  }
+}
