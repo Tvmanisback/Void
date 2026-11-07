@@ -244,16 +244,23 @@ app.get("/api/browser/screenshot", authenticate, async (req, res) => {
 });
 
 app.post("/api/browser/input", authenticate, async (req, res) => {
-  const session = browserSessions.get(req.voidUser.id);
-  const page = session?.pages?.get(String(req.body?.tabId || "1"));
-  if (!session || !session.browser.isConnected() || !page || page.isClosed()) {
-    return res.status(404).json({ error: "Open a website before interacting with it." });
-  }
   const body = req.body || {};
+  const tabId = String(body.tabId || "1").slice(0, 32);
+  const requestedUrl = validBrowserUrl(body.url);
   try {
     await withBrowserLock(req.voidUser.id, async () => {
-      const page = session.pages.get(String(body.tabId || "1"));
-      if (!page || page.isClosed()) throw new Error("That browser tab is no longer active.");
+      let session = browserSessions.get(req.voidUser.id);
+      if (!session?.browser?.isConnected()) {
+        if (!requestedUrl) throw new Error("The browser session expired. Reopen the website and try again.");
+        session = await getBrowserSession(req.voidUser.id);
+      }
+      let page = session.pages.get(tabId);
+      if (!page || page.isClosed()) {
+        if (!requestedUrl) throw new Error("That browser tab expired. Reopen the website and try again.");
+        await browserNavigate(session, requestedUrl, tabId);
+        page = session.pages.get(tabId);
+      }
+      if (!page || page.isClosed()) throw new Error("The browser tab could not be restored.");
       if (body.type === "click" && Number.isFinite(body.x) && Number.isFinite(body.y)) {
         await page.mouse.click(Math.max(0, Math.min(1365, body.x)), Math.max(0, Math.min(850, body.y)), { button: body.button === "right" ? "right" : "left" });
       } else if (body.type === "scroll") {
