@@ -72,27 +72,10 @@ async function getUserSandbox(userId) {
     .maybeSingle();
   if (readError) throw new Error("Could not load your runtime session. Check the Supabase runtime table.");
 
-  const checkpointName = "void-user-v2-" + userId;
-  if (saved?.sandbox_id) {
-    try {
-      const existing = await Sandbox.connect(saved.sandbox_id);
-      const check = await existing.exec("pwd", { cwd: "/app", timeoutSec: 10, ephemeral: true });
-      if (check.exitCode === 0) return existing;
-    } catch {
-      // The idle timeout may have destroyed the VM. Restore the last saved workspace.
-    }
-  }
-
-  let sandbox;
-  if (saved?.checkpoint_name === checkpointName) {
-    try {
-      sandbox = await Sandbox.create(checkpointName, { idleTimeoutMinutes: 5 });
-    } catch {
-      sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
-    }
-  } else {
-    sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
-  }
+  const checkpointName = "void-user-v3-" + userId;
+  // Always create a fresh sandbox while diagnosing template failures.
+  // Do not reconnect to a possibly stale sandbox ID or restore an old checkpoint.
+  const sandbox = await Sandbox.create(template, { idleTimeoutMinutes: 5 });
 
   const { error: saveError } = await admin.from("void_runtime_sessions").upsert({
     user_id: userId,
