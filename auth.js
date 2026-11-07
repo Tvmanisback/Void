@@ -39,7 +39,6 @@
     const nameWrap = document.getElementById('auth-name-wrap');
     const submit = document.getElementById('auth-submit');
     const authScreen = document.getElementById('auth-screen');
-    const guestBtn = document.getElementById('auth-guest');
     if (!form || !signInTab || !signUpTab || !authScreen) {
       throw new Error('Authentication screen elements are missing');
     }
@@ -51,7 +50,7 @@
     if (supabase) {
       setConnectionStatus('<span class="connected"></span> Connected to Supabase');
     } else {
-      setConnectionStatus('<span></span> Offline mode — use Guest to continue');
+      setConnectionStatus('<span></span> Sign-in service is not configured');
     }
 
     let mode = 'signin';
@@ -74,22 +73,11 @@
     signInTab.addEventListener('click', () => setMode('signin'));
     signUpTab.addEventListener('click', () => setMode('signup'));
 
-    // Guest bypass — always works, no network required
-    if (guestBtn) {
-      guestBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        onAuthenticated({
-          email: 'guest@void.local',
-          user_metadata: { display_name: 'Guest' }
-        });
-      });
-    }
-
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const activeClient = getClient();
       if (!activeClient) {
-        showMessage('Sign-in unavailable. Click Continue as Guest instead.', 'error');
+        showMessage('Sign-in is unavailable because Supabase is not configured.', 'error');
         return;
       }
 
@@ -134,7 +122,7 @@
       })
       .catch(error => {
         console.error('Supabase session restore failed:', error);
-        setConnectionStatus('<span></span> Could not reach sign-in service — use Guest');
+        setConnectionStatus('<span></span> Could not reach sign-in service');
       });
   }
 
