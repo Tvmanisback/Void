@@ -64,52 +64,33 @@ async function authenticate(req, res, next) {
 }
 
 async function getUserSandbox(userId) {
-  const { data: saved, error: readError } = await admin
-    .from("void_runtime_sessions")
-    .select("sandbox_id, checkpoint_name")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (readError) throw new Error("Could not load your runtime session. Check the Supabase runtime table.");
+  // Start with Railway's standard image. Do not attempt checkpoint/template
+  // restoration until the first clean sandbox has been proven to work.
+  const sandbox = await Sandbox.create({ idleTimeoutMinutes: 5 });
 
-  const checkpointName = "void-user-v4-" + userId;
-  let sandbox;
-  let restored = false;
-
-  if (saved?.checkpoint_name === checkpointName) {
-    try {
-      sandbox = await Sandbox.create(checkpointName, { idleTimeoutMinutes: 5 });
-      restored = true;
-    } catch (restoreError) {
-      console.warn("Could not restore the saved Void workspace; creating a fresh one:", restoreError?.message || restoreError);
-    }
+  const setup = await sandbox.exec(
+    "apt-get update && apt-get install -y python3 lua5.4",
+    { timeoutSec: 180 }
+  );
+  if (setup.exitCode !== 0) {
+    await sandbox.destroy().catch(() => {});
+    const details = (setup.stderr || setup.stdout || "Package installation failed.").slice(-1200);
+    throw new Error("Could not prepare Python and Lua in the runtime: " + details);
   }
 
-  if (!sandbox) {
-    sandbox = await Sandbox.create({ idleTimeoutMinutes: 5 });
-  }
-
-  if (!restored) {
-    const setup = await sandbox.exec(
-      "apt-get update && apt-get install -y python3 lua5.4",
-      { timeoutSec: 180 }
-    );
-    if (setup.exitCode !== 0) {
-      await sandbox.destroy().catch(() => {});
-      const details = (setup.stderr || setup.stdout || "Package installation failed.").slice(-1200);
-      throw new Error("Could not prepare Python and Lua in the runtime: " + details);
-    }
-  }
-
+  const checkpointName = "void-user-v5-" + userId;
   const { error: saveError } = await admin.from("void_runtime_sessions").upsert({
     user_id: userId,
     sandbox_id: sandbox.id,
     checkpoint_name: checkpointName,
     updated_at: new Date().toISOString()
   }, { onConflict: "user_id" });
+
   if (saveError) {
     await sandbox.destroy().catch(() => {});
     throw new Error("Could not save your runtime session. Check the Supabase runtime table.");
   }
+
   return sandbox;
 }
 
