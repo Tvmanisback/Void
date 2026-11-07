@@ -124,7 +124,7 @@ async function withBrowserLock(userId, task) {
 
 async function getBrowserSession(userId) {
   let session = browserSessions.get(userId);
-  if (session?.browser?.isConnected() && !session.page.isClosed()) {
+  if (session?.browser?.isConnected()) {
     session.lastUsed = Date.now();
     return session;
   }
@@ -139,17 +139,9 @@ async function getBrowserSession(userId) {
   const context = await browser.newContext({
     viewport: { width: 1365, height: 850 },
     deviceScaleFactor: 1,
-    ignoreHTTPSErrors: false
+    acceptDownloads: true
   });
-  const page = await context.newPage();
-  await page.route("**/*", async route => {
-    const requestUrl = route.request().url();
-    if (requestUrl.startsWith("data:") || requestUrl.startsWith("blob:") || requestUrl.startsWith("about:")) return route.continue();
-    const safe = validBrowserUrl(requestUrl);
-    if (!safe) return route.abort("blockedbyclient");
-    return route.continue();
-  });
-  session = { browser, context, page, lastUsed: Date.now() };
+  session = { browser, context, pages: new Map(), lastUsed: Date.now() };
   browserSessions.set(userId, session);
   browser.on("disconnected", () => {
     if (browserSessions.get(userId) === session) browserSessions.delete(userId);
@@ -157,16 +149,33 @@ async function getBrowserSession(userId) {
   return session;
 }
 
-async function browserNavigate(session, url) {
+async function getBrowserPage(session, tabId = "1") {
+  const key = String(tabId).slice(0, 32) || "1";
+  let page = session.pages.get(key);
+  if (page && !page.isClosed()) return page;
+  page = await session.context.newPage();
+  await page.route("**/*", async route => {
+    const requestUrl = route.request().url();
+    if (requestUrl.startsWith("data:") || requestUrl.startsWith("blob:") || requestUrl.startsWith("about:")) return route.continue();
+    if (!validBrowserUrl(requestUrl)) return route.abort("blockedbyclient");
+    return route.continue();
+  });
+  session.pages.set(key, page);
+  page.on("close", () => { if (session.pages.get(key) === page) session.pages.delete(key); });
+  return page;
+}
+
+async function browserNavigate(session, url, tabId = "1") {
   const safeUrl = validBrowserUrl(url);
   if (!safeUrl) throw new Error("Enter a public HTTP or HTTPS website address.");
+  const page = await getBrowserPage(session, tabId);
   try {
-    await session.page.goto(safeUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.goto(safeUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
   } catch (error) {
     if (!/timeout/i.test(error.message || "")) throw error;
   }
   session.lastUsed = Date.now();
-  return { url: session.page.url(), title: await session.page.title().catch(() => "Browser") };
+  return { url: page.url(), title: await page.title().catch(() => "Browser") };
 }
 
 app.post("/api/browser/open", authenticate, async (req, res) => {
@@ -175,7 +184,7 @@ app.post("/api/browser/open", authenticate, async (req, res) => {
   try {
     const result = await withBrowserLock(req.voidUser.id, async () => {
       const session = await getBrowserSession(req.voidUser.id);
-      return browserNavigate(session, url);
+      return browserNavigate(session, url, req.body?.tabId || "1");
     });
     res.json({ ok: true, ...result, width: 1365, height: 850 });
   } catch (error) {
@@ -200,12 +209,13 @@ app.post("/api/browser/navigate", authenticate, async (req, res) => {
 
 app.get("/api/browser/screenshot", authenticate, async (req, res) => {
   const session = browserSessions.get(req.voidUser.id);
-  if (!session || !session.browser.isConnected() || session.page.isClosed()) {
+  const page = session?.pages?.get(String(req.query.tabId || "1"));
+  if (!session || !session.browser.isConnected() || !page || page.isClosed()) {
     return res.status(404).json({ error: "No active browser session. Open a website first." });
   }
   try {
     session.lastUsed = Date.now();
-    const image = await session.page.screenshot({ type: "jpeg", quality: 68, fullPage: false, animations: "disabled" });
+    const image = await page.screenshot({ type: "jpeg", quality: 68, fullPage: false, animations: "disabled" });
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("X-Void-Page-Width", "1365");
@@ -218,13 +228,15 @@ app.get("/api/browser/screenshot", authenticate, async (req, res) => {
 
 app.post("/api/browser/input", authenticate, async (req, res) => {
   const session = browserSessions.get(req.voidUser.id);
-  if (!session || !session.browser.isConnected() || session.page.isClosed()) {
+  const page = session?.pages?.get(String(req.body?.tabId || "1"));
+  if (!session || !session.browser.isConnected() || !page || page.isClosed()) {
     return res.status(404).json({ error: "Open a website before interacting with it." });
   }
   const body = req.body || {};
   try {
     await withBrowserLock(req.voidUser.id, async () => {
-      const page = session.page;
+      const page = session.pages.get(String(body.tabId || "1"));
+      if (!page || page.isClosed()) throw new Error("That browser tab is no longer active.");
       if (body.type === "click" && Number.isFinite(body.x) && Number.isFinite(body.y)) {
         await page.mouse.click(Math.max(0, Math.min(1365, body.x)), Math.max(0, Math.min(850, body.y)), { button: body.button === "right" ? "right" : "left" });
       } else if (body.type === "scroll") {
