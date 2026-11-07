@@ -397,8 +397,8 @@ document.getElementById('s').onsubmit=function(e){
   e.preventDefault();
   var q=document.getElementById('q').value.trim();
   if(!q) return;
-  if(/^https?:\\/\\//i.test(q) || /^(localhost|(?:[a-z0-9-]+\\.)+[a-z]{2,})(:\\d+)?(?:[/?#].*)?$/i.test(q)){
-    parent.postMessage({type:'void-navigate',url:/^https?:\\/\\//i.test(q)?q:'https://'+q},'*');
+  if(/^https?:\/\//i.test(q) || /^(localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(:\d+)?(?:[/?#].*)?$/i.test(q)){
+    parent.postMessage({type:'void-navigate',url:/^https?:\/\//i.test(q)?q:'https://'+q},'*');
   }else{
     parent.postMessage({type:'void-search',query:q},'*');
   }
@@ -449,10 +449,10 @@ function createBrowser(container){
   function normalizeUrl(raw){
     const value=(raw||'').trim();
     if(!value)return null;
-    if(/^https?:\\/\\//i.test(value)){
+    if(/^https?:\/\//i.test(value)){
       try{const parsed=new URL(value);return parsed.protocol==='http:'||parsed.protocol==='https:'?parsed.href:null;}catch{return null;}
     }
-    if(/^(localhost|(?:[a-z0-9-]+\\.)+[a-z]{2,})(:\\d+)?(?:[/?#].*)?$/i.test(value)){
+    if(/^(localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(:\d+)?(?:[/?#].*)?$/i.test(value)){
       try{return new URL('https://'+value).href;}catch{return null;}
     }
     return 'https://duckduckgo.com/?q='+encodeURIComponent(value);
