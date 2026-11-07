@@ -455,7 +455,7 @@ function createBrowser(container){
     if(/^(localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(:\d+)?(?:[/?#].*)?$/i.test(value)){
       try{return new URL('https://'+value).href;}catch{return null;}
     }
-    return 'https://duckduckgo.com/?q='+encodeURIComponent(value);
+    return 'https://html.duckduckgo.com/html/?q='+encodeURIComponent(value);
   }
   function navigate(raw,push=true){
     const url=normalizeUrl(raw);if(!url){status.textContent='Enter a valid website address';return;}
@@ -561,9 +561,9 @@ function createAbout(container){
       <section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)">
         <h3 style="margin:0 0 10px">What's new in this update</h3>
         <ul style="padding-left:20px;margin:0;line-height:1.7">
-          <li><strong>DuckDuckGo search:</strong> search the web directly from the browser's address bar or start page.</li>
-          <li><strong>Browser controls:</strong> the Go button and Enter key now submit searches, while website addresses open directly.</li>
-          <li><strong>Website loading:</strong> browser page requests continue to use CORS proxy support.</li>
+          <li><strong>DuckDuckGo search:</strong> uses DuckDuckGo's lightweight HTML results page for better compatibility with the built-in browser.</li>
+          <li><strong>Browser controls:</strong> the Go button and Enter key submit searches, while website addresses open directly.</li>
+          <li><strong>Website loading:</strong> browser page requests use CORS proxy support.</li>
           <li><strong>Accounts:</strong> sign in or create an account to use Void; Guest access is unavailable.</li>
           <li><strong>Terminal:</strong> runtime support is available, including Python.</li>
         </ul>
