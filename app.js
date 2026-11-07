@@ -37,6 +37,13 @@ const LS = {
   set(k,v){ localStorage.setItem('void_'+k, JSON.stringify(v)) }
 };
 
+const VOID_FILES_DB='void-files-v1';
+function openVoidFilesDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(VOID_FILES_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('files'))r.result.createObjectStore('files',{keyPath:'id'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+async function saveVoidFile(name,blob,url){const db=await openVoidFilesDB();return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');const item={id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),name:name||'download',blob,url:url||'',size:blob.size,type:blob.type||'application/octet-stream',savedAt:Date.now()};tx.objectStore('files').put(item);tx.oncomplete=()=>{db.close();resolve(item);};tx.onerror=()=>{db.close();reject(tx.error);};});}
+async function listVoidFiles(){const db=await openVoidFilesDB();return new Promise((resolve,reject)=>{const r=db.transaction('files','readonly').objectStore('files').getAll();r.onsuccess=()=>{db.close();resolve((r.result||[]).sort((a,b)=>b.savedAt-a.savedAt));};r.onerror=()=>{db.close();reject(r.error);};});}
+async function deleteVoidFile(id){const db=await openVoidFilesDB();return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(id);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>{db.close();reject(tx.error);};});}
+async function downloadVoidFile(item){const url=URL.createObjectURL(item.blob);const a=document.createElement('a');a.href=url;a.download=item.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+
 const isMobile = () => window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 function bindActivation(element, handler){
   if(!element) return;
@@ -475,43 +482,34 @@ function createBrowser(container){
   async function loadPage(url){
     if(activeController)activeController.abort();
     const controller=new AbortController();activeController=controller;const thisRequest=++requestId;
-    status.textContent='Connecting to CORS proxy…';iframe.removeAttribute('src');iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px">Loading page…</body></html>';
-    let lastError=null;
-    for(let index=0;index<PROXY_LIST.length;index++){
-      if(controller.signal.aborted)return;
-      status.textContent=index===0?'Fetching page through CORS proxy…':'Retrying with proxy '+(index+1)+'…';
-      try{
-        const response=await fetch(PROXY_LIST[index](url),{method:'GET',mode:'cors',credentials:'omit',redirect:'follow',signal:controller.signal,headers:{'Accept':'text/html,application/xhtml+xml,*/*'}});
-        if(!response.ok)throw new Error('Proxy returned HTTP '+response.status);
-        const html=await response.text();if(!html||html.length<20)throw new Error('Proxy returned an empty page');
-        if(thisRequest!==requestId||controller.signal.aborted)return;
-        const doc=new DOMParser().parseFromString(html,'text/html');
+    const host=new URL(url).hostname.toLowerCase();
+    const readerMode=host==='github.com'||host.endsWith('.github.com')||host==='reddit.com'||host.endsWith('.reddit.com');
+    status.textContent='Loading '+host+'…';iframe.removeAttribute('src');
+    iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#bbb;background:#111">Loading…</body></html>';
+    const target=readerMode?'https://r.jina.ai/'+url:url;
+    const attempts=PROXY_LIST.slice(0,3).map((makeProxy,index)=>(async()=>{
+      const local=new AbortController();const abort=()=>local.abort();controller.signal.addEventListener('abort',abort,{once:true});
+      const timer=setTimeout(()=>local.abort(),readerMode?12000:9000);
+      try{const response=await fetch(makeProxy(target),{mode:'cors',credentials:'omit',signal:local.signal,headers:{'Accept':readerMode?'text/plain,*/*':'text/html,application/xhtml+xml,*/*'}});
+        if(!response.ok)throw Error('Proxy HTTP '+response.status);const body=await response.text();if(!body||body.length<20)throw Error('Empty response');return {body,index};
+      }finally{clearTimeout(timer);controller.signal.removeEventListener('abort',abort);}
+    })());
+    try{
+      const winner=await Promise.any(attempts);if(thisRequest!==requestId||controller.signal.aborted)return;
+      if(readerMode){
+        const escaped=winner.body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const linked=escaped.replace(/(https?:\/\/[^\s&<>]+)/g,'<a href="$1">$1</a>');
+        iframe.srcdoc='<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;background:#fff;color:#24292f;font:14px/1.65 system-ui;overflow-wrap:anywhere}main{max-width:1050px;margin:auto}a{color:#0969da}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,monospace}</style></head><body><main><h2>'+host+' · readable view</h2><p>Readable page view. Some interactive features are unavailable in this mode.</p><pre>'+linked+'</pre></main><script>document.addEventListener("click",function(e){var a=e.target.closest("a[href]");if(a){e.preventDefault();parent.postMessage({type:"void-navigate",url:a.href},"*");}},true);</script></body></html>';
+        status.textContent='Loaded readable view · proxy '+(winner.index+1);
+      }else{
+        const doc=new DOMParser().parseFromString(winner.body,'text/html');
         doc.querySelectorAll('meta[http-equiv="Content-Security-Policy"],meta[http-equiv="X-Frame-Options"]').forEach(node=>node.remove());
         let base=doc.querySelector('base');if(!base){base=doc.createElement('base');doc.head.prepend(base);}base.href=url;
         const bridge=doc.createElement('script');
-        bridge.textContent=`(()=>{
-          const send=url=>parent.postMessage({type:'void-navigate',url:String(url)},'*');
-          document.addEventListener('click',event=>{
-            const link=event.target.closest&&event.target.closest('a[href]');if(!link)return;
-            const href=link.href;if(!href||href.startsWith('javascript:')||href.startsWith('mailto:')||href.startsWith('tel:'))return;
-            event.preventDefault();send(href);
-          },true);
-          document.addEventListener('submit',event=>{
-            const form=event.target;if(!(form instanceof HTMLFormElement))return;
-            if((form.method||'get').toLowerCase()==='get'){
-              event.preventDefault();const target=new URL(form.action||document.baseURI);
-              new FormData(form).forEach((value,key)=>target.searchParams.append(key,String(value)));send(target.href);
-            }
-          },true);
-        })();`;
-        doc.body.appendChild(bridge);
-        iframe.srcdoc='<!DOCTYPE html>\\n'+doc.documentElement.outerHTML;
-        status.textContent='Loaded via CORS proxy '+(index+1);return;
-      }catch(error){if(error.name==='AbortError')return;lastError=error;}
-    }
-    if(thisRequest!==requestId)return;
-    status.textContent='Could not load: '+(lastError&&lastError.message?lastError.message:'all proxies failed');
-    iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#333"><h2>Page could not be loaded</h2><p>The CORS proxies could not retrieve this website. Try another address or reload.</p></body></html>';
+        bridge.textContent="(()=>{const send=url=>parent.postMessage({type:'void-navigate',url:String(url)},'*');const download=(url,name)=>parent.postMessage({type:'void-download',url:String(url),name:name||''},'*');const isFile=url=>/\\.(zip|exe|msi|dmg|pkg|apk|pdf|png|jpe?g|gif|webp|svg|txt|csv|json|docx?|xlsx?|pptx?|mp3|mp4|webm|mov|tar|gz|7z|rar)(?:[?#]|$)/i.test(url);document.addEventListener('click',event=>{const link=event.target.closest&&event.target.closest('a[href]');if(!link)return;const href=link.href;if(!href||/^(javascript:|mailto:|tel:)/i.test(href))return;if(link.hasAttribute('download')||isFile(href)){event.preventDefault();event.stopPropagation();download(href,link.getAttribute('download')||link.textContent.trim());return;}event.preventDefault();event.stopPropagation();send(href);},true);document.addEventListener('submit',event=>{const form=event.target;if(!(form instanceof HTMLFormElement))return;if((form.method||'get').toLowerCase()==='get'){event.preventDefault();const target=new URL(form.action||document.baseURI);new FormData(form).forEach((value,key)=>target.searchParams.append(key,String(value)));send(target.href);}},true);})();";
+        doc.body.appendChild(bridge);iframe.srcdoc='<!DOCTYPE html>\n'+doc.documentElement.outerHTML;status.textContent='Loaded · proxy '+(winner.index+1);
+      }
+    }catch(error){if(controller.signal.aborted||thisRequest!==requestId)return;status.textContent='Could not load: '+(error.message||'all proxies failed');iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#ddd;background:#171717"><h2>Page could not be loaded</h2><p>The browser could not retrieve this page. Try Reload.</p></body></html>';}
   }
   form.addEventListener('submit',e=>{e.preventDefault();navigate(input.value);});
   bindActivation(container.querySelector('.go-btn'),e=>{e.preventDefault();navigate(input.value);});
@@ -520,10 +518,16 @@ function createBrowser(container){
   bindActivation(container.querySelector('.back-btn'),()=>switchHistory(-1));
   bindActivation(container.querySelector('.fwd-btn'),()=>switchHistory(1));
   bindActivation(container.querySelector('.reload-btn'),()=>{const t=getTab();if(t&&t.url)loadPage(t.url);else showStartPage();});
-  window.addEventListener('message',e=>{
+  window.addEventListener('message',async e=>{
     if(e.source!==iframe.contentWindow||!e.data)return;
     if(e.data.type==='void-navigate')navigate(e.data.url);
     else if(e.data.type==='void-search')navigate(String(e.data.query||''));
+    else if(e.data.type==='void-download'){
+      const target=String(e.data.url||'');if(!/^https?:\/\//i.test(target))return;
+      status.textContent='Downloading…';let error=null;
+      for(const makeProxy of PROXY_LIST){try{const response=await fetch(makeProxy(target),{credentials:'omit'});if(!response.ok)throw Error('HTTP '+response.status);const blob=await response.blob();if(!blob.size)throw Error('Empty download');const pathName=new URL(target).pathname.split('/').pop()||'download';const name=(e.data.name||pathName).replace(/[\\/:*?"<>|]/g,'_').slice(0,160)||'download';await saveVoidFile(name,blob,target);status.textContent='Saved '+name+' to Files';return;}catch(err){error=err;}}
+      status.textContent='Download failed: '+(error&&error.message||'proxy error');
+    }
   });
   renderTabs();showStartPage();updateNav();
 }
@@ -545,7 +549,10 @@ function createTerminal(container){
 }
 
 function createFiles(container){
-  container.innerHTML='<div class="app-content"><h2>Files</h2><p>Local file manager (localStorage)</p></div>';
+  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h2>Files</h2><p style="color:var(--text-dim)">Downloads saved from Void Browser</p></div><button type="button" class="files-refresh">Refresh</button></div><div class="files-list" style="margin-top:16px;display:grid;gap:8px"><p style="color:var(--text-dim)">Loading files…</p></div></div>';
+  const list=container.querySelector('.files-list');
+  async function refresh(){list.innerHTML='<p style="color:var(--text-dim)">Loading files…</p>';try{const files=await listVoidFiles();if(!files.length){list.innerHTML='<p style="color:var(--text-dim)">No downloads yet. Download a file in Void Browser and it will appear here.</p>';return;}list.innerHTML='';files.forEach(file=>{const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface,transparent)';const info=document.createElement('div');info.style.cssText='min-width:0;flex:1';const name=document.createElement('div');name.textContent=file.name;name.style.cssText='font-weight:600;overflow-wrap:anywhere';const meta=document.createElement('div');meta.textContent=(file.size/1048576).toFixed(2)+' MB · '+new Date(file.savedAt).toLocaleString();meta.style.cssText='font-size:11px;color:var(--text-dim);margin-top:4px';info.append(name,meta);const save=document.createElement('button');save.type='button';save.textContent='Save';save.onclick=()=>downloadVoidFile(file);const del=document.createElement('button');del.type='button';del.textContent='Delete';del.onclick=async()=>{await deleteVoidFile(file.id);refresh();};row.append(info,save,del);list.appendChild(row);});}catch(error){list.textContent='Could not read saved files: '+(error.message||String(error));}}
+  container.querySelector('.files-refresh').addEventListener('click',refresh);refresh();
 }
 
 function createNotes(container){
@@ -561,23 +568,7 @@ function createSettings(container){
 }
 
 function createAbout(container){
-  container.innerHTML=`
-    <div class="app-content" style="height:100%;overflow:auto">
-      <h2>About Void</h2>
-      <p>A complete desktop environment in your browser.</p>
-      <section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)">
-        <h3 style="margin:0 0 10px">What's new in this update</h3>
-        <ul style="padding-left:20px;margin:0;line-height:1.7">
-          <li><strong>Browser shortcuts:</strong> Wikipedia, GitHub, Reddit and YouTube now use explicit website addresses and send navigation requests to the built-in browser.</li>
-          <li><strong>DuckDuckGo search:</strong> uses the lightweight HTML results page for browser compatibility.</li>
-          <li><strong>Browser controls:</strong> Go and Enter submit searches, while website addresses open directly.</li>
-          <li><strong>Terminal:</strong> runtime support is available, including Python.</li>
-          <li><strong>Accounts:</strong> sign in or create an account; Guest access is unavailable.</li>
-        </ul>
-      </section>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p>
-      <p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p>
-    </div>`;
+  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><h2>About Void</h2><p>A complete desktop environment in your browser.</p><section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)"><h3 style="margin:0 0 10px">What\'s new in this update</h3><ul style="padding-left:20px;margin:0;line-height:1.7"><li><strong>Faster loading:</strong> browser requests race multiple proxy services.</li><li><strong>GitHub and Reddit:</strong> readable page mode displays site content when full interactive pages cannot run in the embedded browser.</li><li><strong>Downloads:</strong> supported file links save into the Files app.</li><li><strong>Files:</strong> downloads are stored in browser storage and can be saved to the device or deleted.</li></ul></section><p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p><p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p></div>';
 }
 
 window.VoidOS={openApp,APPS};
