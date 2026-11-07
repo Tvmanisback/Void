@@ -561,10 +561,11 @@ function createAbout(container){
       <section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)">
         <h3 style="margin:0 0 10px">What's new in this update</h3>
         <ul style="padding-left:20px;margin:0;line-height:1.7">
-          <li><strong>Void Browser:</strong> improved website loading through CORS proxy support, plus browser navigation and tab improvements.</li>
-          <li><strong>Accounts:</strong> Guest access has been removed. Sign in or create an account to use Void.</li>
+          <li><strong>DuckDuckGo search:</strong> search the web directly from the browser's address bar or start page.</li>
+          <li><strong>Browser controls:</strong> the Go button and Enter key now submit searches, while website addresses open directly.</li>
+          <li><strong>Website loading:</strong> browser page requests continue to use CORS proxy support.</li>
+          <li><strong>Accounts:</strong> sign in or create an account to use Void; Guest access is unavailable.</li>
           <li><strong>Terminal:</strong> runtime support is available, including Python.</li>
-          <li><strong>Stability:</strong> improved loading feedback and general app reliability.</li>
         </ul>
       </section>
       <p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p>
