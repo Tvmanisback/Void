@@ -359,11 +359,25 @@ function startClock(){
   tick(); setInterval(tick,10000);
 }
 
-const PROXY_KEY='1ec6a957';
-function buildProxyUrl(t){ return `https://corsproxy.io/?key=${PROXY_KEY}&url=${encodeURIComponent(t)}`; }
+/* ===== Proxy helpers ===== */
+const PROXY_LIST = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
+let currentProxyIndex = 0;
+
+function buildProxyUrl(target) {
+  return PROXY_LIST[currentProxyIndex](target);
+}
+
+function nextProxy() {
+  currentProxyIndex = (currentProxyIndex + 1) % PROXY_LIST.length;
+}
 
 /* ===== Void Start Page (no URL) ===== */
-function getStartPageHTML(){
+function getStartPageHTML() {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -388,14 +402,14 @@ button:hover{filter:brightness(1.1)}
 <a href="#" data-url="https://wikipedia.org">Wikipedia</a>
 <a href="#" data-url="https://github.com">GitHub</a>
 <a href="#" data-url="https://reddit.com">Reddit</a>
-<a href="#" data-url="https://youtube.com">YouTube</a>
+<a href="#" data-url="https://duckduckgo.com">DuckDuckGo</a>
 </div>
 <script>
 document.getElementById('s').onsubmit=function(e){
   e.preventDefault();
   var q=document.getElementById('q').value.trim();
   if(!q) return;
-  var url = /^https?:\/\//i.test(q) ? q : (q.includes('.') && !q.includes(' ') ? 'https://'+q : 'https://duckduckgo.com/?q='+encodeURIComponent(q));
+  var url = /^https?:\\/\\//i.test(q) ? q : (q.includes('.') && !q.includes(' ') ? 'https://'+q : 'https://duckduckgo.com/?q='+encodeURIComponent(q));
   parent.postMessage({type:'void-navigate',url:url},'*');
 };
 document.querySelectorAll('[data-url]').forEach(function(a){
@@ -405,10 +419,12 @@ document.querySelectorAll('[data-url]').forEach(function(a){
 }
 
 /* ===== Browser with Tabs ===== */
-function createBrowser(container){
-  let tabs = [{ id:1, title:'New Tab', url:null, history:[], histIndex:-1 }];
+function createBrowser(container) {
+  let tabs = [{ id: 1, title: 'New Tab', url: null, history: [], histIndex: -1 }];
   let activeTab = 1;
   let nextId = 2;
+  let loadWatchdog = null;
+  let loadAttempts = 0;
 
   container.innerHTML = `
   <div class="browser" style="display:flex;flex-direction:column;height:100%">
@@ -425,6 +441,12 @@ function createBrowser(container){
     </div>
     <div style="flex:1;position:relative;min-height:0">
       <iframe class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" referrerpolicy="no-referrer"></iframe>
+      <div class="browser-error" style="display:none;position:absolute;inset:0;background:#0b0b12;color:#e8e6f0;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;z-index:5">
+        <div style="font-size:42px;opacity:.6">⚠</div>
+        <div style="font-size:16px;font-weight:600">Page failed to load</div>
+        <div class="error-detail" style="font-size:13px;color:#9b97b0;max-width:360px"></div tri>
+        <button class="retry-btn" style="margin-top:8px;padding:10px 22px;border:none;border-radius:8px;background:#8b5cf6;color:#fff;font-weight:600;cursor:pointer">Retry</button>
+      </div>
     </div>
     <div class="browser-status"><span class="status-text">Ready</span></div>
   </div>`;
@@ -434,20 +456,32 @@ function createBrowser(container){
   const input = container.querySelector('.url-input');
   const form = container.querySelector('.url-form');
   const status = container.querySelector('.status-text');
+  const errorOverlay = container.querySelector('.browser-error');
+  const errorDetail = container.querySelector('.error-detail');
 
-  function getTab(){ return tabs.find(t=>t.id===activeTab); }
+  function getTab() { return tabs.find(t => t.id === activeTab); }
 
-  function renderTabs(){
+  function hideError() {
+    errorOverlay.style.display = 'none';
+  }
+
+  function showError(msg) {
+    errorDetail.textContent = msg || 'The proxy could not reach this site.';
+    errorOverlay.style.display = 'flex';
+    status.textContent = 'Failed';
+  }
+
+  function renderTabs() {
     tabsEl.innerHTML = '';
-    tabs.forEach(t=>{
+    tabs.forEach(t => {
       const el = document.createElement('div');
-      el.className = 'browser-tab'+(t.id===activeTab?' active':'');
+      el.className = 'browser-tab' + (t.id === activeTab ? ' active' : '');
       el.innerHTML = `<span class="tab-title">${t.title}</span><button class="tab-close" data-id="${t.id}">×</button>`;
-      bindActivation(el, (e)=>{
-        if(e.target.closest('.tab-close')) return;
+      bindActivation(el, (e) => {
+        if (e.target.closest('.tab-close')) return;
         switchTab(t.id);
       });
-      bindActivation(el.querySelector('.tab-close'), (e)=>{
+      bindActivation(el.querySelector('.tab-close'), (e) => {
         e.stopPropagation();
         closeTab(t.id);
       });
@@ -455,14 +489,14 @@ function createBrowser(container){
     });
   }
 
-  function switchTab(id){
+  function switchTab(id) {
     activeTab = id;
     const t = getTab();
     input.value = t.url || '';
-    if(t.url){
+    hideError();
+    if (t.url) {
       status.textContent = 'Loading…';
-      armLoadWatchdog(t.url);
-      iframe.src = buildProxyUrl(t.url);
+      loadPage(t.url);
     } else {
       showStartPage();
     }
@@ -470,26 +504,24 @@ function createBrowser(container){
     updateNav();
   }
 
-  function closeTab(id){
-    if(tabs.length===1){
-      // reset to start
-      tabs[0] = { id:tabs[0].id, title:'New Tab', url:null, history:[], histIndex:-1 };
-      activeTab = tabs[0].id;
+  function closeTab(id) {
+    if (tabs.length === 1) {
+      tabs[0] = { id: tabs[0].id, title: 'New Tab', url: null, history: [], histIndex: -1 };
       showStartPage();
       input.value = '';
       renderTabs();
       return;
     }
-    const idx = tabs.findIndex(t=>t.id===id);
-    tabs.splice(idx,1);
-    if(activeTab===id){
-      activeTab = tabs[Math.max(0,idx-1)].id;
+    const idx = tabs.findIndex(t => t.id === id);
+    tabs.splice(idx, 1);
+    if (activeTab === id) {
+      activeTab = tabs[Math.max(0, idx - 1)].id;
       switchTab(activeTab);
     } else renderTabs();
   }
 
-  function newTab(){
-    const t = { id:nextId++, title:'New Tab', url:null, history:[], histIndex:-1 };
+  function newTab() {
+    const t = { id: nextId++, title: 'New Tab', url: null, history: [], histIndex: -1 };
     tabs.push(t);
     activeTab = t.id;
     showStartPage();
@@ -498,79 +530,130 @@ function createBrowser(container){
     updateNav();
   }
 
-  function showStartPage(){
+  function showStartPage() {
     status.textContent = 'Start';
-    // Clear any previous proxied page before showing the fresh start page.
+    hideError();
     iframe.removeAttribute('src');
     iframe.srcdoc = getStartPageHTML();
   }
 
-  function navigate(raw, push=true){
-    let url = (raw||'').trim();
-    if(!url){ showStartPage(); return; }
+  function loadPage(url) {
+    hideError();
+    status.textContent = 'Loading…';
+    if (loadWatchdog) clearTimeout(loadWatchdog);
 
-    // treat as search if no protocol and looks like search
-    if(!/^https?:\/\//i.test(url)){
-      if(url.includes('.') && !url.includes(' ')) url = 'https://' + url;
+    loadAttempts = 0;
+    tryLoad(url);
+  }
+
+  function tryLoad(url) {
+    loadAttempts++;
+    const proxyUrl = buildProxyUrl(url);
+
+    iframe.onload = () => {
+      if (loadWatchdog) clearTimeout(loadWatchdog);
+      // Heuristic: blank / very short pages often mean the proxy failed
+      try {
+        const doc = iframe.contentDocument;
+        if (doc && doc.body && doc.body.innerText.trim().length < 30 && loadAttempts < PROXY_LIST.length) {
+          // likely a bad response → try next proxy
+          nextProxy();
+          tryLoad(url);
+          return;
+        }
+      } catch (_) { /* cross-origin is expected with some proxies */ }
+
+      status.textContent = 'Loaded';
+      hideError();
+    };
+
+    iframe.onerror = () => {
+      if (loadAttempts < PROXY_LIST.length) {
+        nextProxy();
+        tryLoad(url);
+      } else {
+        showError('All proxies failed. The site may block embedding or the proxies are down.');
+      }
+    };
+
+    iframe.src = proxyUrl;
+
+    loadWatchdog = setTimeout(() => {
+      if (status.textContent === 'Loading…') {
+        if (loadAttempts < PROXY_LIST.length) {
+          nextProxy();
+          tryLoad(url);
+        } else {
+          showError('Timed out. Proxies are slow or blocked for this site.');
+        }
+      }
+    }, 12000);
+  }
+
+  function navigate(raw, push = true) {
+    let url = (raw || '').trim();
+    if (!url) { showStartPage(); return; }
+
+    if (!/^https?:\/\//i.test(url)) {
+      if (url.includes('.') && !url.includes(' ')) url = 'https://' + url;
       else url = 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
     }
 
     const t = getTab();
-    status.textContent = 'Loading…';
-    armLoadWatchdog(url);
-    iframe.src = buildProxyUrl(url);
     t.url = url;
-    t.title = url.replace(/^https?:\/\//,'').split('/')[0] || 'Tab';
-    if(push){
-      t.history.splice(t.histIndex+1);
+    t.title = url.replace(/^https?:\/\//, '').split('/')[0] || 'Tab';
+
+    if (push) {
+      t.history.splice(t.histIndex + 1);
       t.history.push(url);
-      t.histIndex = t.history.length-1;
+      t.histIndex = t.history.length - 1;
     }
+
     input.value = url;
     renderTabs();
     updateNav();
+    loadPage(url);
   }
 
-  function updateNav(){
+  function updateNav() {
     const t = getTab();
     container.querySelector('.back-btn').disabled = !t || t.histIndex <= 0;
-    container.querySelector('.fwd-btn').disabled = !t || t.histIndex >= t.history.length-1;
+    container.querySelector('.fwd-btn').disabled = !t || t.histIndex >= t.history.length - 1;
   }
 
-  form.onsubmit = e=>{ e.preventDefault(); navigate(input.value); };
+  form.onsubmit = e => { e.preventDefault(); navigate(input.value); };
 
   bindActivation(container.querySelector('.new-tab-btn'), newTab);
-  bindActivation(container.querySelector('.back-btn'), ()=>{
-    const t=getTab(); if(t && t.histIndex>0){ t.histIndex--; navigate(t.history[t.histIndex], false); }
+  bindActivation(container.querySelector('.back-btn'), () => {
+    const t = getTab();
+    if (t && t.histIndex > 0) {
+      t.histIndex--;
+      navigate(t.history[t.histIndex], false);
+    }
   });
-  bindActivation(container.querySelector('.fwd-btn'), ()=>{
-    const t=getTab(); if(t && t.histIndex<t.history.length-1){ t.histIndex++; navigate(t.history[t.histIndex], false); }
+  bindActivation(container.querySelector('.fwd-btn'), () => {
+    const t = getTab();
+    if (t && t.histIndex < t.history.length - 1) {
+      t.histIndex++;
+      navigate(t.history[t.histIndex], false);
+    }
   });
-  bindActivation(container.querySelector('.reload-btn'), ()=>{
-    const t=getTab();
-    if(t && t.url) navigate(t.url, false);
+  bindActivation(container.querySelector('.reload-btn'), () => {
+    const t = getTab();
+    if (t && t.url) navigate(t.url, false);
     else showStartPage();
   });
-  let loadWatchdog=null;
-  function armLoadWatchdog(targetUrl){
-    if(loadWatchdog) clearTimeout(loadWatchdog);
-    loadWatchdog=setTimeout(()=>{
-      const current=getTab();
-      if(current && current.url===targetUrl && status.textContent==='Loading…'){
-        status.textContent='Still loading — proxy may be unavailable';
-      }
-    },15000);
-  }
-  iframe.onload = ()=>{
-    if(loadWatchdog) clearTimeout(loadWatchdog);
-    status.textContent = getTab()?.url ? 'Loaded' : 'Start';
-  };
+  bindActivation(container.querySelector('.retry-btn'), () => {
+    const t = getTab();
+    if (t && t.url) {
+      nextProxy(); // force different proxy on manual retry
+      loadPage(t.url);
+    }
+  });
 
-  // Only accept navigation requests from this browser window's own start page.
-  // Without the source check, every open Void Browser window reacts to the same message.
-  const handleBrowserMessage = (e)=>{
-    if(e.source !== iframe.contentWindow) return;
-    if(e.data && e.data.type==='void-navigate'){
+  const handleBrowserMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (e.data && e.data.type === 'void-navigate') {
       navigate(e.data.url);
     }
   };
@@ -582,287 +665,3 @@ function createBrowser(container){
 
 /* ===== VoidCode ===== */
 function createVoidCode(container, winId){
-  const files = {
-    'main.js': { lang:'javascript', content:`// VoidCode — fully working editor\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('visitor'));\n` },
-    'index.html': { lang:'html', content:`<!DOCTYPE html>\n<html>\n<head>\n  <title>Void</title>\n</head>\n<body>\n  <h1>Hello from VoidCode</h1>\n</body>\n</html>` },
-    'style.css': { lang:'css', content:`body {\n  background: #0b0b12;\n  color: #e8e6f0;\n  font-family: system-ui, sans-serif;\n}` }
-  };
-  let current = 'main.js';
-
-  container.innerHTML = `<div class="vscode">
-    <div class="vscode-activity">
-      <button class="active" title="Explorer">📄</button>
-    </div>
-    <div class="vscode-sidebar">
-      <div class="vscode-sidebar-header">Explorer</div>
-      <div class="vscode-sidebar-content" id="vc-files"></div>
-    </div>
-    <div class="vscode-main">
-      <div class="vscode-tabs" id="vc-tabs"></div>
-      <div class="vscode-editor" id="monaco-${winId}"></div>
-      <div class="vscode-statusbar">
-        <span id="vc-lang">JavaScript</span>
-        <span>UTF-8</span>
-        <span id="vc-pos">Ln 1, Col 1</span>
-        <span style="margin-left:auto"></span>
-        <button id="vc-run" style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:12px;padding:0 8px">▶ Run</button>
-      </div>
-    </div>
-  </div>`;
-
-  const filesEl = container.querySelector('#vc-files');
-  const tabsEl = container.querySelector('#vc-tabs');
-  const langEl = container.querySelector('#vc-lang');
-  const posEl = container.querySelector('#vc-pos');
-  let editor = null;
-
-  function renderFiles(){
-    filesEl.innerHTML = '';
-    Object.keys(files).forEach(name=>{
-      const el = document.createElement('div');
-      el.className = 'vscode-file'+(name===current?' active':'');
-      el.textContent = name;
-      el.onclick = ()=>openFile(name);
-      filesEl.appendChild(el);
-    });
-  }
-  function renderTabs(){
-    tabsEl.innerHTML = `<div class="vscode-tab">${current}</div>`;
-  }
-  function openFile(name){
-    if(editor && current){
-      files[current].content = editor.getValue();
-    }
-    current = name;
-    const f = files[name];
-    if(editor){
-      editor.setValue(f.content);
-      monaco.editor.setModelLanguage(editor.getModel(), f.lang);
-    }
-    langEl.textContent = f.lang;
-    renderFiles(); renderTabs();
-  }
-
-  function init(){
-    require.config({paths:{vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}});
-    require(['vs/editor/editor.main'],()=>{
-      editor = monaco.editor.create(container.querySelector(`#monaco-${winId}`),{
-        value: files[current].content,
-        language: files[current].lang,
-        theme: 'vs-dark',
-        automaticLayout: true,
-        fontSize: 14,
-        fontFamily: "'JetBrains Mono', monospace",
-        minimap: { enabled: !isMobile() },
-        scrollBeyondLastLine: false,
-        padding: { top: 8 },
-        wordWrap: isMobile() ? 'on' : 'off'
-      });
-      monacoEditors.set(winId, editor);
-      editor.onDidChangeCursorPosition(e=>{
-        posEl.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
-      });
-      container.querySelector('#vc-run').onclick = ()=>{
-        if(files[current].lang !== 'javascript'){ alert('Run only works for JavaScript'); return; }
-        try{
-          const result = eval(editor.getValue());
-          console.log('VoidCode:', result);
-          alert('Ran successfully. Check console for output.');
-        }catch(err){ alert('Error: '+err.message); }
-      };
-    });
-  }
-  renderFiles(); renderTabs();
-  if(window.require) init(); else setTimeout(init, 400);
-}
-
-/* ===== Terminal ===== */
-function createTerminal(container){
-  container.innerHTML=`<div class="terminal">
-    <div class="terminal-output" id="term-out"></div>
-    <div class="terminal-input-line">
-      <span class="terminal-prompt">void@os:~$</span>
-      <input class="terminal-input" spellcheck="false" autocomplete="off" placeholder="Type help and press Enter"/>
-    </div></div>`;
-  const out=container.querySelector('#term-out');
-  const input=container.querySelector('.terminal-input');
-  let busy=false;
-  function print(t,cls=''){
-    const d=document.createElement('div');
-    d.className='terminal-line '+(cls||'');
-    d.textContent=String(t);
-    out.appendChild(d);
-    out.scrollTop=out.scrollHeight;
-  }
-  print('Void Terminal v1.1');
-  print('Python, Node.js, npm and Lua run in an isolated Railway sandbox.');
-  print('Type "help" for commands.\n');
-  const cmds={
-    help:()=>print('Local: help, clear, echo, date, whoami, neofetch, apps\nRuntime: install python, install node, install lua, python, node, npm, lua, pwd, ls, cd, mkdir, cat, touch, rm'),
-    clear:()=>{out.innerHTML=''},
-    echo:(a)=>print(a.join(' ')),
-    date:()=>print(new Date().toString()),
-    whoami:()=>print('void'),
-    neofetch:()=>print('Void OS  |  Remote isolated runtime  |  Railway Sandboxes'),
-    apps:()=>print(APPS.map(a=>a.name).join(', '))
-  };
-  function apiUrl(){
-    return String(window.VOID_RUNTIME_CONFIG?.apiUrl||'').trim().replace(/\/+$/,'');
-  }
-  async function runRemote(command){
-    const base=apiUrl();
-    if(!base){
-      print('Runtime is not connected yet. Set apiUrl in runtime-config.js after deploying the runtime service.','terminal-err');
-      return;
-    }
-    if(!window.VoidAuth?.getAccessToken){
-      print('Authentication integration is unavailable.','terminal-err');
-      return;
-    }
-    busy=true; input.disabled=true;
-    print('Connecting to runtime…','terminal-muted');
-    try{
-      const token=await window.VoidAuth.getAccessToken();
-      if(!token) throw new Error('Your sign-in session expired. Sign in again.');
-      const response=await fetch(base+'/api/exec',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-        body:JSON.stringify({command})
-      });
-      const data=await response.json().catch(()=>({error:'The runtime returned an invalid response.'}));
-      if(!response.ok) throw new Error(data.error||('Runtime request failed ('+response.status+').'));
-      if(data.stdout) print(data.stdout.replace(/\n$/,''));
-      if(data.stderr) print(data.stderr.replace(/\n$/,''),'terminal-err');
-      if(data.timedOut) print('Command timed out.','terminal-err');
-      else if(data.exitCode!==0) print('Process exited with code '+data.exitCode,'terminal-muted');
-    }catch(error){
-      print(error.message||String(error),'terminal-err');
-    }finally{
-      busy=false; input.disabled=false; input.focus();
-    }
-  }
-  input.addEventListener('keydown',async e=>{
-    if(e.key!=='Enter'||busy) return;
-    const line=input.value.trim(); input.value='';
-    print('void@os:~$ '+line,'terminal-cmd');
-    if(!line) return;
-    const [cmd,...args]=line.split(/\s+/);
-    if(cmds[cmd]){cmds[cmd](args);return;}
-    if(cmd==='install'){
-      const target=(args[0]||'').toLowerCase();
-      const checks={
-        python:'python --version',
-        node:'node --version && npm --version',
-        lua:'lua -v'
-      };
-      if(!checks[target]){
-        print('Usage: install python | install node | install lua','terminal-err');
-        return;
-      }
-      print('Checking '+target+' in your isolated workspace…','terminal-muted');
-      await runRemote(checks[target]);
-      return;
-    }
-    await runRemote(line);
-  });
-  setTimeout(()=>input.focus(),100);
-}
-
-function createFiles(container){
-  let files=LS.get('files',[{name:'Welcome.txt',type:'file',content:'Welcome to Void OS Files!'},{name:'Projects',type:'folder'}]);
-  container.innerHTML=`<div class="fm"><div class="fm-sidebar"><button class="active">📁 Home</button></div>
-    <div class="fm-main"><div class="fm-toolbar"><button id="fm-new-file" type="button">+ File</button><button id="fm-new-folder" type="button">+ Folder</button></div>
-    <form id="fm-entry-dialog" hidden><input id="fm-entry-name" placeholder="Name" required maxlength="120"/><button type="submit">Create</button><button type="button" id="fm-entry-cancel">Cancel</button></form>
-    <div class="fm-list" id="fm-list"></div></div></div>`;
-  const list=container.querySelector('#fm-list');
-  function render(){
-    list.innerHTML='';
-    files.forEach(f=>{
-      const el=document.createElement('div'); el.className='fm-item';
-      el.innerHTML=`<div class="icon">${f.type==='folder'?'📁':'📄'}</div><span>${f.name}</span>`;
-      el.ondblclick=()=>{ if(f.type==='file') alert(f.content||'(empty)'); };
-      list.appendChild(el);
-    });
-    LS.set('files',files);
-  }
-  function showEntryDialog(type){
-    const form=container.querySelector('#fm-entry-dialog');
-    form.dataset.type=type;
-    form.hidden=false;
-    const field=container.querySelector('#fm-entry-name');
-    field.value='';
-    field.placeholder=type==='folder'?'Folder name':'File name';
-    field.focus();
-  }
-  bindActivation(container.querySelector('#fm-new-file'),()=>showEntryDialog('file'));
-  bindActivation(container.querySelector('#fm-new-folder'),()=>showEntryDialog('folder'));
-  bindActivation(container.querySelector('#fm-entry-cancel'),()=>{container.querySelector('#fm-entry-dialog').hidden=true;});
-  container.querySelector('#fm-entry-dialog').addEventListener('submit',event=>{
-    event.preventDefault();
-    const form=event.currentTarget;
-    const name=container.querySelector('#fm-entry-name').value.trim();
-    if(!name) return;
-    const type=form.dataset.type;
-    files.push(type==='folder'?{name,type}:{name,type,content:''});
-    form.hidden=true;
-    render();
-  });
-  render();
-}
-
-function createNotes(container){
-  let notes=LS.get('notes',[{id:1,title:'Welcome',body:'This is your first note in Void OS.\n\nNotes are saved locally.'}]);
-  let current=notes[0]?.id||null;
-  container.innerHTML=`<div class="notes"><div class="notes-sidebar"><div class="notes-sidebar-header"><span>Notes</span><button id="note-new">+</button></div><div class="notes-list" id="notes-list"></div></div>
-    <div class="notes-editor"><input class="notes-title" id="note-title" placeholder="Title"/><textarea class="notes-body" id="note-body" placeholder="Start writing..."></textarea></div></div>`;
-  const list=container.querySelector('#notes-list');
-  const titleEl=container.querySelector('#note-title');
-  const bodyEl=container.querySelector('#note-body');
-  function save(){ const n=notes.find(x=>x.id===current); if(n){ n.title=titleEl.value; n.body=bodyEl.value; LS.set('notes',notes); renderList(); } }
-  function renderList(){
-    list.innerHTML='';
-    notes.forEach(n=>{
-      const el=document.createElement('div');
-      el.className='notes-item'+(n.id===current?' active':'');
-      el.innerHTML=`<div class="title">${n.title||'Untitled'}</div><div class="preview">${(n.body||'').slice(0,40)}</div>`;
-      el.onclick=()=>{ current=n.id; titleEl.value=n.title; bodyEl.value=n.body; renderList(); };
-      list.appendChild(el);
-    });
-  }
-  bindActivation(container.querySelector('#note-new'),()=>{ const id=Date.now(); notes.unshift({id,title:'New Note',body:''}); current=id; titleEl.value='New Note'; bodyEl.value=''; LS.set('notes',notes); renderList(); });
-  titleEl.oninput=save; bodyEl.oninput=save;
-  if(current){ const n=notes.find(x=>x.id===current); titleEl.value=n.title; bodyEl.value=n.body; }
-  renderList();
-}
-
-function createStore(container){
-  const catalog=[
-    {id:'browser',name:'Void Browser',desc:'Tabbed proxy browser',icon:ICONS.browser},
-    {id:'voidcode',name:'VoidCode',desc:'VS Code style editor',icon:ICONS.voidcode},
-    {id:'terminal',name:'Terminal',desc:'Command line',icon:ICONS.terminal},
-    {id:'files',name:'Files',desc:'Local file manager',icon:ICONS.files},
-    {id:'notes',name:'Notes',desc:'Quick notes',icon:ICONS.notes},
-    {id:'settings',name:'Settings',desc:'Preferences',icon:ICONS.settings}
-  ];
-  container.innerHTML=`<div class="store"><h2>TycoreStore</h2><p class="store-sub">Apps for Void OS</p><div class="store-grid" id="store-grid"></div></div>`;
-  const grid=container.querySelector('#store-grid');
-  catalog.forEach(app=>{
-    const card=document.createElement('div'); card.className='store-card';
-    card.innerHTML=`<div class="icon">${iconImg(app.icon)}</div><div class="name">${app.name}</div><div class="desc">${app.desc}</div><button>Open</button>`;
-    bindActivation(card.querySelector('button'),()=>openApp(app.id));
-    grid.appendChild(card);
-  });
-}
-
-function createSettings(container){
-  container.innerHTML=`<div class="app-content"><h2>Settings</h2><div class="card"><label><input type="checkbox" checked/> Window animations</label></div><div class="card"><p style="margin:0">Everything runs locally.</p></div></div>`;
-}
-function createAbout(container){
-  container.innerHTML=`<div class="app-content"><h2>Void OS</h2><p>A complete desktop environment in your browser.</p>
-    <div class="card"><strong>Apps</strong><ul style="margin:8px 0 0 18px;color:var(--text-dim);font-size:13px;line-height:1.7">
-      <li>Void Browser — tabbed proxy browser</li><li>VoidCode — VS Code style editor</li><li>Terminal, Files, Notes, TycoreStore</li></ul></div>
-    <p style="font-size:12px;color:var(--text-dim);margin-top:16px">github.com/Tvmanisback/Void</p></div>`;
-}
-
-window.VoidOS={openApp,APPS};
-})();
