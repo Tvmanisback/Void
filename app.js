@@ -682,30 +682,88 @@ function createTerminal(container){
     <div class="terminal-output" id="term-out"></div>
     <div class="terminal-input-line">
       <span class="terminal-prompt">void@os:~$</span>
-      <input class="terminal-input" spellcheck="false" autocomplete="off"/>
+      <input class="terminal-input" spellcheck="false" autocomplete="off" placeholder="Type help and press Enter"/>
     </div></div>`;
   const out=container.querySelector('#term-out');
   const input=container.querySelector('.terminal-input');
-  function print(t,cls=''){ const d=document.createElement('div'); d.className='terminal-line '+(cls||''); d.textContent=t; out.appendChild(d); out.scrollTop=out.scrollHeight; }
-  print('Void Terminal v1.0');
+  let busy=false;
+  function print(t,cls=''){
+    const d=document.createElement('div');
+    d.className='terminal-line '+(cls||'');
+    d.textContent=String(t);
+    out.appendChild(d);
+    out.scrollTop=out.scrollHeight;
+  }
+  print('Void Terminal v1.1');
+  print('Python, Node.js, npm and Lua run in an isolated Railway sandbox.');
   print('Type "help" for commands.\n');
   const cmds={
-    help:()=>print('Commands: help, clear, echo, date, whoami, neofetch, apps'),
+    help:()=>print('Local: help, clear, echo, date, whoami, neofetch, apps\nRuntime: install python, install node, install lua, python, node, npm, lua, pwd, ls, cd, mkdir, cat, touch, rm'),
     clear:()=>{out.innerHTML=''},
     echo:(a)=>print(a.join(' ')),
     date:()=>print(new Date().toString()),
     whoami:()=>print('void'),
-    neofetch:()=>print('Void OS  |  Browser Desktop Environment  |  Pure Frontend'),
+    neofetch:()=>print('Void OS  |  Remote isolated runtime  |  Railway Sandboxes'),
     apps:()=>print(APPS.map(a=>a.name).join(', '))
   };
-  input.addEventListener('keydown',e=>{
-    if(e.key!=='Enter') return;
+  function apiUrl(){
+    return String(window.VOID_RUNTIME_CONFIG?.apiUrl||'').trim().replace(/\/+$/,'');
+  }
+  async function runRemote(command){
+    const base=apiUrl();
+    if(!base){
+      print('Runtime is not connected yet. Set apiUrl in runtime-config.js after deploying the runtime service.','terminal-err');
+      return;
+    }
+    if(!window.VoidAuth?.getAccessToken){
+      print('Authentication integration is unavailable.','terminal-err');
+      return;
+    }
+    busy=true; input.disabled=true;
+    print('Connecting to runtime…','terminal-muted');
+    try{
+      const token=await window.VoidAuth.getAccessToken();
+      if(!token) throw new Error('Your sign-in session expired. Sign in again.');
+      const response=await fetch(base+'/api/exec',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({command})
+      });
+      const data=await response.json().catch(()=>({error:'The runtime returned an invalid response.'}));
+      if(!response.ok) throw new Error(data.error||('Runtime request failed ('+response.status+').'));
+      if(data.stdout) print(data.stdout.replace(/\n$/,''));
+      if(data.stderr) print(data.stderr.replace(/\n$/,''),'terminal-err');
+      if(data.timedOut) print('Command timed out.','terminal-err');
+      else if(data.exitCode!==0) print('Process exited with code '+data.exitCode,'terminal-muted');
+    }catch(error){
+      print(error.message||String(error),'terminal-err');
+    }finally{
+      busy=false; input.disabled=false; input.focus();
+    }
+  }
+  input.addEventListener('keydown',async e=>{
+    if(e.key!=='Enter'||busy) return;
     const line=input.value.trim(); input.value='';
     print('void@os:~$ '+line,'terminal-cmd');
     if(!line) return;
     const [cmd,...args]=line.split(/\s+/);
-    if(cmds[cmd]) cmds[cmd](args);
-    else print(`command not found: ${cmd}`,'terminal-err');
+    if(cmds[cmd]){cmds[cmd](args);return;}
+    if(cmd==='install'){
+      const target=(args[0]||'').toLowerCase();
+      const checks={
+        python:'python --version',
+        node:'node --version && npm --version',
+        lua:'lua -v'
+      };
+      if(!checks[target]){
+        print('Usage: install python | install node | install lua','terminal-err');
+        return;
+      }
+      print('Checking '+target+' in your isolated workspace…','terminal-muted');
+      await runRemote(checks[target]);
+      return;
+    }
+    await runRemote(line);
   });
   setTimeout(()=>input.focus(),100);
 }
