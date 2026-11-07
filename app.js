@@ -420,41 +420,320 @@ function createBrowser(container){
 
 /* ===== VoidCode ===== */
 function createVoidCode(container, winId){
-  container.innerHTML='<div class="vscode" style="display:flex;height:100%"><div class="vscode-sidebar"><div class="vscode-activity"></div></div><div class="vscode-main" style="flex:1"><div id="monaco-'+winId+'" style="height:100%"></div></div></div>';
-  if(window.require){
-    require.config({paths:{vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}});
-    require(['vs/editor/editor.main'],function(){
-      const ed=monaco.editor.create(document.getElementById('monaco-'+winId),{value:'// VoidCode\nconsole.log("hello");',language:'javascript',theme:'vs-dark',automaticLayout:true});
-      monacoEditors.set(winId,ed);
+  const files = {
+    'main.js': { lang:'javascript', content:`// VoidCode — fully working editor\n\nfunction hello(name) {\n  return \`Hello, ${name}! Welcome to the void.\`;\n}\n\nconsole.log(hello('visitor'));\n` },
+    'index.html': { lang:'html', content:`<!DOCTYPE html>\n<html>\n<head>\n  <title>Void</title>\n</head>\n<body>\n  <h1>Hello from VoidCode</h1>\n</body>\n</html>` },
+    'style.css': { lang:'css', content:`body {\n  background: #0b0b12;\n  color: #e8e6f0;\n  font-family: system-ui, sans-serif;\n}` }
+  };
+  let current = 'main.js';
+
+  container.innerHTML = `<div class="vscode">
+    <div class="vscode-activity">
+      <button class="active" title="Explorer">📄</button>
+    </div>
+    <div class="vscode-sidebar">
+      <div class="vscode-sidebar-header">Explorer</div>
+      <div class="vscode-sidebar-content" id="vc-files"></div>
+    </div>
+    <div class="vscode-main">
+      <div class="vscode-tabs" id="vc-tabs"></div>
+      <div class="vscode-editor" id="monaco-${winId}"></div>
+      <div class="vscode-statusbar">
+        <span id="vc-lang">JavaScript</span>
+        <span>UTF-8</span>
+        <span id="vc-pos">Ln 1, Col 1</span>
+        <span style="margin-left:auto"></span>
+        <button id="vc-run" style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:12px;padding:0 8px">▶ Run</button>
+      </div>
+    </div>
+  </div>`;
+
+  const filesEl = container.querySelector('#vc-files');
+  const tabsEl = container.querySelector('#vc-tabs');
+  const langEl = container.querySelector('#vc-lang');
+  const posEl = container.querySelector('#vc-pos');
+  let editor = null;
+
+  function renderFiles(){
+    filesEl.innerHTML = '';
+    Object.keys(files).forEach(name=>{
+      const el = document.createElement('div');
+      el.className = 'vscode-file'+(name===current?' active':'');
+      el.textContent = name;
+      el.onclick = ()=>openFile(name);
+      filesEl.appendChild(el);
     });
   }
+  function renderTabs(){
+    tabsEl.innerHTML = `<div class="vscode-tab">${current}</div>`;
+  }
+  function openFile(name){
+    if(editor && current){
+      files[current].content = editor.getValue();
+    }
+    current = name;
+    const f = files[name];
+    if(editor){
+      editor.setValue(f.content);
+      monaco.editor.setModelLanguage(editor.getModel(), f.lang);
+    }
+    langEl.textContent = f.lang;
+    renderFiles(); renderTabs();
+  }
+
+  function init(){
+    require.config({paths:{vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}});
+    require(['vs/editor/editor.main'],()=>{
+      editor = monaco.editor.create(container.querySelector(`#monaco-${winId}`),{
+        value: files[current].content,
+        language: files[current].lang,
+        theme: 'vs-dark',
+        automaticLayout: true,
+        fontSize: 14,
+        fontFamily: "'JetBrains Mono', monospace",
+        minimap: { enabled: !isMobile() },
+        scrollBeyondLastLine: false,
+        padding: { top: 8 },
+        wordWrap: isMobile() ? 'on' : 'off'
+      });
+      monacoEditors.set(winId, editor);
+      editor.onDidChangeCursorPosition(e=>{
+        posEl.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+      });
+      container.querySelector('#vc-run').onclick = ()=>{
+        if(files[current].lang !== 'javascript'){ alert('Run only works for JavaScript'); return; }
+        try{
+          const result = eval(editor.getValue());
+          console.log('VoidCode:', result);
+          alert('Ran successfully. Check console for output.');
+        }catch(err){ alert('Error: '+err.message); }
+      };
+    });
+  }
+  renderFiles(); renderTabs();
+  if(window.require) init(); else setTimeout(init, 400);
 }
 
+/* ===== Terminal ===== */
+
 function createTerminal(container){
-  container.innerHTML='<div class="terminal" style="height:100%;background:#0b0b12;color:#c4b5fd;font-family:monospace;padding:12px;overflow:auto"><div class="term-out">Void Terminal</div><div class="term-line"><span class="prompt">$</span> <input class="term-in" style="background:transparent;border:none;color:#fff;outline:none;width:80%"/></div></div>';
+  container.innerHTML=`<div class="terminal">
+    <div class="terminal-output" id="term-out"></div>
+    <div class="terminal-input-line">
+      <span class="terminal-prompt">void@os:~$</span>
+      <input class="terminal-input" spellcheck="false" autocomplete="off" placeholder="Type help and press Enter"/>
+    </div></div>`;
+  const out=container.querySelector('#term-out');
+  const input=container.querySelector('.terminal-input');
+  let busy=false;
+  function print(t,cls=''){
+    const d=document.createElement('div');
+    d.className='terminal-line '+(cls||'');
+    d.textContent=String(t);
+    out.appendChild(d);
+    out.scrollTop=out.scrollHeight;
+  }
+  print('Void Terminal v1.1');
+  print('Python, Node.js, npm and Lua run in an isolated Railway sandbox.');
+  print('Type "help" for commands.\n');
+  const cmds={
+    help:()=>print('Local: help, clear, echo, date, whoami, neofetch, apps\nRuntime: install python, install node, install lua, python, node, npm, lua, pwd, ls, cd, mkdir, cat, touch, rm'),
+    clear:()=>{out.innerHTML=''},
+    echo:(a)=>print(a.join(' ')),
+    date:()=>print(new Date().toString()),
+    whoami:()=>print('void'),
+    neofetch:()=>print('Void OS  |  Remote isolated runtime  |  Railway Sandboxes'),
+    apps:()=>print(APPS.map(a=>a.name).join(', '))
+  };
+  function apiUrl(){
+    return String(window.VOID_RUNTIME_CONFIG?.apiUrl||'').trim().replace(/\/+$/,'');
+  }
+  async function runRemote(command){
+    const base=apiUrl();
+    if(!base){
+      print('Runtime is not connected yet. Set apiUrl in runtime-config.js after deploying the runtime service.','terminal-err');
+      return;
+    }
+    if(!window.VoidAuth?.getAccessToken){
+      print('Authentication integration is unavailable.','terminal-err');
+      return;
+    }
+    busy=true; input.disabled=true;
+    print('Connecting to runtime…','terminal-muted');
+    try{
+      const token=await window.VoidAuth.getAccessToken();
+      if(!token) throw new Error('Your sign-in session expired. Sign in again.');
+      const response=await fetch(base+'/api/exec',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({command})
+      });
+      const data=await response.json().catch(()=>({error:'The runtime returned an invalid response.'}));
+      if(!response.ok) throw new Error(data.error||('Runtime request failed ('+response.status+').'));
+      if(data.stdout) print(data.stdout.replace(/\n$/,''));
+      if(data.stderr) print(data.stderr.replace(/\n$/,''),'terminal-err');
+      if(data.timedOut) print('Command timed out.','terminal-err');
+      else if(data.exitCode!==0) print('Process exited with code '+data.exitCode,'terminal-muted');
+    }catch(error){
+      print(error.message||String(error),'terminal-err');
+    }finally{
+      busy=false; input.disabled=false; input.focus();
+    }
+  }
+  input.addEventListener('keydown',async e=>{
+    if(e.key!=='Enter'||busy) return;
+    const line=input.value.trim(); input.value='';
+    print('void@os:~$ '+line,'terminal-cmd');
+    if(!line) return;
+    const [cmd,...args]=line.split(/\s+/);
+    if(cmds[cmd]){cmds[cmd](args);return;}
+    if(cmd==='install'){
+      const target=(args[0]||'').toLowerCase();
+      const checks={
+        python:'python --version',
+        node:'node --version && npm --version',
+        lua:'lua -v'
+      };
+      if(!checks[target]){
+        print('Usage: install python | install node | install lua','terminal-err');
+        return;
+      }
+      print('Checking '+target+' in your isolated workspace…','terminal-muted');
+      await runRemote(checks[target]);
+      return;
+    }
+    await runRemote(line);
+  });
+  setTimeout(()=>input.focus(),100);
 }
 
 function createFiles(container){
-  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h2>Files</h2><p style="color:var(--text-dim)">Downloads saved from Void Browser</p></div><button type="button" class="files-refresh">Refresh</button></div><div class="files-list" style="margin-top:16px;display:grid;gap:8px"><p style="color:var(--text-dim)">Loading files…</p></div></div>';
-  const list=container.querySelector('.files-list');
-  async function refresh(){list.innerHTML='<p style="color:var(--text-dim)">Loading files…</p>';try{const files=await listVoidFiles();if(!files.length){list.innerHTML='<p style="color:var(--text-dim)">No downloads yet. Download a file in Void Browser and it will appear here.</p>';return;}list.innerHTML='';files.forEach(file=>{const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface,transparent)';const info=document.createElement('div');info.style.cssText='min-width:0;flex:1';const name=document.createElement('div');name.textContent=file.name;name.style.cssText='font-weight:600;overflow-wrap:anywhere';const meta=document.createElement('div');meta.textContent=(file.size/1048576).toFixed(2)+' MB · '+new Date(file.savedAt).toLocaleString();meta.style.cssText='font-size:11px;color:var(--text-dim);margin-top:4px';info.append(name,meta);const save=document.createElement('button');save.type='button';save.textContent='Save';save.onclick=()=>downloadVoidFile(file);const del=document.createElement('button');del.type='button';del.textContent='Delete';del.onclick=async()=>{await deleteVoidFile(file.id);refresh();};row.append(info,save,del);list.appendChild(row);});}catch(error){list.textContent='Could not read saved files: '+(error.message||String(error));}}
-  container.querySelector('.files-refresh').addEventListener('click',refresh);window.addEventListener('void-files-updated',refresh);refresh();
+  let files=LS.get('files',[{name:'Welcome.txt',type:'file',content:'Welcome to Void OS Files!'},{name:'Projects',type:'folder'}]);
+  let section='home';
+  container.innerHTML=`<div class="fm">
+    <div class="fm-sidebar">
+      <button type="button" data-section="home" class="active">📁 Home</button>
+      <button type="button" data-section="downloads">⬇ Downloads</button>
+    </div>
+    <div class="fm-main">
+      <div class="fm-toolbar"><strong class="fm-heading">Home</strong><span style="flex:1"></span><button id="fm-new-file" type="button">+ File</button><button id="fm-new-folder" type="button">+ Folder</button></div>
+      <form id="fm-entry-dialog" hidden style="padding:10px;display:flex;gap:8px;align-items:center"><input id="fm-entry-name" placeholder="Name" required maxlength="120"/><button type="submit">Create</button><button type="button" id="fm-entry-cancel">Cancel</button></form>
+      <div class="fm-list" id="fm-list"></div>
+    </div></div>`;
+  const list=container.querySelector('#fm-list');
+  function renderHome(){
+    list.innerHTML='';
+    if(!files.length){list.textContent='This folder is empty.';return;}
+    files.forEach((f,index)=>{
+      const el=document.createElement('div');el.className='fm-item';
+      const glyph=document.createElement('span');glyph.textContent=f.type==='folder'?'📁':'📄';
+      const name=document.createElement('span');name.textContent=f.name;
+      el.append(glyph,name);
+      if(f.type==='file')el.addEventListener('click',()=>{
+        const preview=document.createElement('div');preview.style.cssText='position:absolute;inset:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px;z-index:5;display:flex;flex-direction:column;gap:10px';
+        const head=document.createElement('div');head.style.cssText='display:flex;gap:8px;align-items:center';
+        const label=document.createElement('strong');label.textContent=f.name;
+        const close=document.createElement('button');close.type='button';close.textContent='Close';close.style.marginLeft='auto';close.onclick=()=>preview.remove();
+        const content=document.createElement('textarea');content.value=f.content||'';content.style.cssText='flex:1;min-height:0;width:100%;resize:none;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px';
+        content.addEventListener('input',()=>{f.content=content.value;LS.set('files',files);});
+        head.append(label,close);preview.append(head,content);container.querySelector('.fm-main').append(preview);content.focus();
+      });
+      if(f.type==='folder'){const tag=document.createElement('small');tag.textContent='Folder';tag.style.marginLeft='auto';el.append(tag);}
+      list.appendChild(el);
+    });
+  }
+  async function renderDownloads(){
+    list.innerHTML='<div class="fm-item">Loading downloads…</div>';
+    try{
+      const downloads=await listVoidFiles();
+      list.innerHTML='';
+      if(!downloads.length){list.textContent='No downloads yet. Files downloaded in Void Browser will appear here.';return;}
+      downloads.forEach(file=>{
+        const row=document.createElement('div');row.className='fm-item';
+        const glyph=document.createElement('span');glyph.textContent='⬇';
+        const name=document.createElement('span');name.textContent=file.name;name.style.flex='1';name.style.overflowWrap='anywhere';
+        const size=document.createElement('small');size.textContent=(file.size/1048576).toFixed(2)+' MB';
+        const save=document.createElement('button');save.type='button';save.textContent='Save';save.onclick=()=>downloadVoidFile(file);
+        const del=document.createElement('button');del.type='button';del.textContent='Delete';del.onclick=async()=>{await deleteVoidFile(file.id);renderDownloads();};
+        row.append(glyph,name,size,save,del);list.appendChild(row);
+      });
+    }catch(error){list.textContent='Could not load downloads: '+(error.message||String(error));}
+  }
+  function showSection(next){
+    section=next;
+    container.querySelectorAll('.fm-sidebar button').forEach(b=>b.classList.toggle('active',b.dataset.section===section));
+    container.querySelector('.fm-heading').textContent=section==='home'?'Home':'Downloads';
+    container.querySelector('#fm-new-file').hidden=section!=='home';
+    container.querySelector('#fm-new-folder').hidden=section!=='home';
+    if(section==='home')renderHome();else renderDownloads();
+  }
+  function showEntryDialog(type){
+    const form=container.querySelector('#fm-entry-dialog');form.dataset.type=type;form.hidden=false;
+    const field=container.querySelector('#fm-entry-name');field.value='';field.placeholder=type==='folder'?'Folder name':'File name';field.focus();
+  }
+  container.querySelectorAll('.fm-sidebar button').forEach(b=>bindActivation(b,()=>showSection(b.dataset.section)));
+  bindActivation(container.querySelector('#fm-new-file'),()=>showEntryDialog('file'));
+  bindActivation(container.querySelector('#fm-new-folder'),()=>showEntryDialog('folder'));
+  bindActivation(container.querySelector('#fm-entry-cancel'),()=>{container.querySelector('#fm-entry-dialog').hidden=true;});
+  container.querySelector('#fm-entry-dialog').addEventListener('submit',event=>{
+    event.preventDefault();const form=event.currentTarget;const name=container.querySelector('#fm-entry-name').value.trim();if(!name)return;
+    const type=form.dataset.type;files.push(type==='folder'?{name,type}:{name,type,content:''});form.hidden=true;LS.set('files',files);renderHome();
+  });
+  window.addEventListener('void-files-updated',()=>{if(section==='downloads')renderDownloads();});
+  renderHome();
 }
 
 function createNotes(container){
-  container.innerHTML='<div class="app-content"><h2>Notes</h2><textarea style="width:100%;height:300px;background:#12121a;color:#fff;border:1px solid #2a2a38;border-radius:8px;padding:12px"></textarea></div>';
+  let notes=LS.get('notes',[{id:1,title:'Welcome',body:'This is your first note in Void OS.\n\nNotes are saved locally.'}]);
+  let current=notes[0]?.id||null;
+  container.innerHTML=`<div class="notes"><div class="notes-sidebar"><div class="notes-sidebar-header"><span>Notes</span><button id="note-new">+</button></div><div class="notes-list" id="notes-list"></div></div>
+    <div class="notes-editor"><input class="notes-title" id="note-title" placeholder="Title"/><textarea class="notes-body" id="note-body" placeholder="Start writing..."></textarea></div></div>`;
+  const list=container.querySelector('#notes-list');
+  const titleEl=container.querySelector('#note-title');
+  const bodyEl=container.querySelector('#note-body');
+  function save(){ const n=notes.find(x=>x.id===current); if(n){ n.title=titleEl.value; n.body=bodyEl.value; LS.set('notes',notes); renderList(); } }
+  function renderList(){
+    list.innerHTML='';
+    notes.forEach(n=>{
+      const el=document.createElement('div');
+      el.className='notes-item'+(n.id===current?' active':'');
+      el.innerHTML=`<div class="title">${n.title||'Untitled'}</div><div class="preview">${(n.body||'').slice(0,40)}</div>`;
+      el.onclick=()=>{ current=n.id; titleEl.value=n.title; bodyEl.value=n.body; renderList(); };
+      list.appendChild(el);
+    });
+  }
+  bindActivation(container.querySelector('#note-new'),()=>{ const id=Date.now(); notes.unshift({id,title:'New Note',body:''}); current=id; titleEl.value='New Note'; bodyEl.value=''; LS.set('notes',notes); renderList(); });
+  titleEl.oninput=save; bodyEl.oninput=save;
+  if(current){ const n=notes.find(x=>x.id===current); titleEl.value=n.title; bodyEl.value=n.body; }
+  renderList();
 }
 
 function createStore(container){
-  container.innerHTML='<div class="app-content"><h2>TycoreStore</h2><p>Apps for Void OS</p></div>';
+  const catalog=[
+    {id:'browser',name:'Void Browser',desc:'Tabbed proxy browser',icon:ICONS.browser},
+    {id:'voidcode',name:'VoidCode',desc:'VS Code style editor',icon:ICONS.voidcode},
+    {id:'terminal',name:'Terminal',desc:'Command line',icon:ICONS.terminal},
+    {id:'files',name:'Files',desc:'Local file manager',icon:ICONS.files},
+    {id:'notes',name:'Notes',desc:'Quick notes',icon:ICONS.notes},
+    {id:'settings',name:'Settings',desc:'Preferences',icon:ICONS.settings}
+  ];
+  container.innerHTML=`<div class="store"><h2>TycoreStore</h2><p class="store-sub">Apps for Void OS</p><div class="store-grid" id="store-grid"></div></div>`;
+  const grid=container.querySelector('#store-grid');
+  catalog.forEach(app=>{
+    const card=document.createElement('div'); card.className='store-card';
+    card.innerHTML=`<div class="icon">${iconImg(app.icon)}</div><div class="name">${app.name}</div><div class="desc">${app.desc}</div><button>Open</button>`;
+    bindActivation(card.querySelector('button'),()=>openApp(app.id));
+    grid.appendChild(card);
+  });
 }
 
 function createSettings(container){
-  container.innerHTML='<div class="app-content"><h2>Settings</h2><p>Everything runs locally.</p></div>';
+  container.innerHTML=`<div class="app-content"><h2>Settings</h2><div class="card"><label><input type="checkbox" checked/> Window animations</label></div><div class="card"><p style="margin:0">Everything runs locally.</p></div></div>`;
 }
 
 function createAbout(container){
-  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><h2>About Void</h2><p>A complete desktop environment in your browser.</p><section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)"><h3 style="margin:0 0 10px">What\'s new in this update</h3><ul style="padding-left:20px;margin:0;line-height:1.7"><li><strong>Real Chromium engine:</strong> websites run in a hosted Chromium browser instead of being reconstructed from proxy HTML.</li><li><strong>Interactive websites:</strong> JavaScript, page clicks, scrolling, keyboard input, and browser navigation run on the remote engine.</li><li><strong>Multiple tabs:</strong> each Void Browser tab gets its own remote page.</li><li><strong>Private sessions:</strong> browser sessions are tied to the signed-in Void account and automatically close after inactivity.</li><li><strong>Browser rendering:</strong> the hosted engine streams the current page view into the Void Browser window.</li><li><strong>Automatic downloads:</strong> files downloaded in Chromium are copied into the Void Files app.</li></ul></section><p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p><p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p></div>';
+  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><h2>About Void</h2><p>A desktop environment with working apps, local files, notes, code editing, and a hosted Chromium browser.</p><section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)"><h3 style="margin:0 0 10px">What\'s new in this update</h3><ul style="padding-left:20px;margin:0;line-height:1.7"><li><strong>Restored app interfaces:</strong> Terminal, VoidCode, Files, Notes, TycoreStore, and Settings have their interactive app screens back.</li><li><strong>Terminal:</strong> commands run through the connected isolated runtime, with local help and utility commands.</li><li><strong>Files:</strong> create files and folders, edit text files, and manage browser downloads.</li><li><strong>Notes:</strong> create and switch between notes with automatic local saving.</li><li><strong>VoidCode:</strong> multi-file editor with JavaScript run support.</li><li><strong>Browser:</strong> hosted Chromium tabs, website input, navigation, and automatic downloads.</li></ul></section><p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p><p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p></div>';
 }
+
 window.VoidOS={openApp,APPS};
 })();
