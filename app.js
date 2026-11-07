@@ -371,166 +371,36 @@ function nextProxy() {
   currentProxyIndex = (currentProxyIndex + 1) % PROXY_LIST.length;
 }
 
-/* ===== Void Start Page (no URL) ===== */
-function getStartPageHTML(){
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-background:#0b0b12;color:#e8e6f0;font-family:system-ui,-apple-system,sans-serif;padding:24px}
-.logo{font-size:64px;font-weight:700;letter-spacing:-2px;margin-bottom:8px;
-background:linear-gradient(135deg,#a78bfa,#6d28d9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.tag{color:#9b97b0;font-size:14px;margin-bottom:32px}
-form{width:100%;max-width:520px;display:flex;gap:0;border-radius:28px;overflow:hidden;
-border:1px solid #2a2a38;background:#12121a;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-input{flex:1;height:52px;border:none;background:transparent;color:#e8e6f0;padding:0 22px;font-size:16px;outline:none}
-button{height:52px;padding:0 22px;border:none;background:#8b5cf6;color:#fff;font-weight:600;cursor:pointer;font-size:15px}
-button:hover{filter:brightness(1.1)}
-.links{margin-top:28px;display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
-.links a{color:#9b97b0;text-decoration:none;font-size:13px}
-.links a:hover{color:#a78bfa}
-</style></head><body>
-<div class="logo">Void</div>
-<div class="tag">Search the web through the void</div>
-<form id="s"><input id="q" placeholder="Search or enter URL" autofocus autocomplete="off"/><button type="submit">Search</button></form>
-<div class="links">
-<a href="https://wikipedia.org" data-url="https://www.wikipedia.org/">Wikipedia</a>
-<a href="https://github.com" data-url="https://github.com/">GitHub</a>
-<a href="https://reddit.com" data-url="https://www.reddit.com/">Reddit</a>
-<a href="https://youtube.com" data-url="https://www.youtube.com/">YouTube</a>
-</div>
-<script>
-document.getElementById('s').onsubmit=function(e){
-  e.preventDefault();
-  var q=document.getElementById('q').value.trim();
-  if(!q) return;
-  if(/^https?:\/\//i.test(q) || /^(localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(:\d+)?(?:[/?#].*)?$/i.test(q)){
-    parent.postMessage({type:'void-navigate',url:/^https?:\/\//i.test(q)?q:'https://'+q},'*');
-  }else{
-    parent.postMessage({type:'void-search',query:q},'*');
-  }
-};
-document.querySelectorAll('[data-url]').forEach(function(a){
-  a.addEventListener('click',function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    var target=new URL(a.getAttribute('data-url'),location.href);
-    if(target.protocol==='https:'||target.protocol==='http:'){
-      parent.postMessage({type:'void-navigate',url:target.href},'*');
-    }
-  },true);
-});
-</script></body></html>`;
-}
-
-/* ===== Browser with Tabs ===== */
+/* ===== Void Browser: proxy-only renderer (no iframe) ===== */
 function createBrowser(container){
   let tabs=[{id:1,title:'New Tab',url:null,history:[],histIndex:-1}],activeTab=1,nextId=2,requestId=0,activeController=null;
-  container.innerHTML=`
-  <div class="browser" style="display:flex;flex-direction:column;height:100%">
-    <div class="browser-tabs" id="browser-tabs"></div>
-    <div class="browser-toolbar">
-      <button class="back-btn" type="button" title="Back">←</button><button class="fwd-btn" type="button" title="Forward">→</button><button class="reload-btn" type="button" title="Reload">↻</button>
-      <form class="url-form" style="flex:1;display:flex;gap:6px"><input class="url-input" type="text" placeholder="Search or enter URL" spellcheck="false" autocomplete="off"/><button type="button" class="go-btn">Go</button></form>
-      <button class="new-tab-btn" type="button" title="New Tab">+</button>
-    </div>
-    <div style="flex:1;position:relative;min-height:0"><iframe class="browser-frame" title="Web page" sandbox="allow-scripts allow-forms allow-popups allow-modals" referrerpolicy="no-referrer" style="width:100%;height:100%;border:0;background:#fff"></iframe></div>
-    <div class="browser-status"><span class="status-text">Ready</span></div>
-  </div>`;
-  const tabsEl=container.querySelector('#browser-tabs'),iframe=container.querySelector('.browser-frame'),input=container.querySelector('.url-input'),form=container.querySelector('.url-form'),status=container.querySelector('.status-text');
+  container.innerHTML=''
+    + '<div class="browser" style="display:flex;flex-direction:column;height:100%">'
+    + '<div class="browser-tabs" id="browser-tabs"></div>'
+    + '<div class="browser-toolbar">'
+    + '<button class="back-btn" type="button" title="Back">←</button><button class="fwd-btn" type="button" title="Forward">→</button>'
+    + '<button class="reload-btn" type="button" title="Reload">↻</button>'
+    + '<form class="url-form" style="display:flex;flex:1;min-width:0"><input class="url-input" type="text" placeholder="Search or enter URL" autocomplete="off"><button class="go-btn" type="submit">Go</button></form>'
+    + '<button class="new-tab-btn" type="button" title="New tab">+</button></div>'
+    + '<div class="browser-content" style="flex:1;min-height:0;overflow:auto;background:#fff;color:#222"></div>'
+    + '<div class="browser-status"><span class="status-text">Ready</span></div></div>';
+  const tabsEl=container.querySelector('#browser-tabs'),view=container.querySelector('.browser-content'),input=container.querySelector('.url-input'),form=container.querySelector('.url-form'),status=container.querySelector('.status-text');
   const getTab=()=>tabs.find(t=>t.id===activeTab);
-  function renderTabs(){
-    tabsEl.innerHTML='';
-    tabs.forEach(t=>{
-      const el=document.createElement('div');el.className='browser-tab'+(t.id===activeTab?' active':'');
-      const title=document.createElement('span');title.className='tab-title';title.textContent=t.title;
-      const close=document.createElement('button');close.type='button';close.className='tab-close';close.textContent='×';
-      el.append(title,close);
-      bindActivation(el,e=>{if(!e.target.closest('.tab-close'))switchTab(t.id);});
-      bindActivation(close,e=>{e.stopPropagation();closeTab(t.id);});
-      tabsEl.appendChild(el);
-    });
-  }
+  function renderTabs(){tabsEl.innerHTML='';tabs.forEach(t=>{const el=document.createElement('div');el.className='browser-tab'+(t.id===activeTab?' active':'');const title=document.createElement('span');title.className='tab-title';title.textContent=t.title;const close=document.createElement('button');close.type='button';close.className='tab-close';close.textContent='×';el.append(title,close);bindActivation(el,e=>{if(!e.target.closest('.tab-close'))switchTab(t.id);});bindActivation(close,e=>{e.stopPropagation();closeTab(t.id);});tabsEl.appendChild(el);});}
   function updateNav(){const t=getTab();container.querySelector('.back-btn').disabled=!t||t.histIndex<=0;container.querySelector('.fwd-btn').disabled=!t||t.histIndex>=t.history.length-1;}
-  function showStartPage(){if(activeController)activeController.abort();status.textContent='Start';iframe.removeAttribute('src');iframe.srcdoc=getStartPageHTML();}
+  function showStartPage(){if(activeController)activeController.abort();status.textContent='Start';view.innerHTML='';view.style.cssText='flex:1;min-height:0;overflow:auto;background:#0b0b12;color:#e8e6f0';const wrap=document.createElement('div');wrap.style.cssText='min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:system-ui';wrap.innerHTML='<div style="font-size:64px;font-weight:700;letter-spacing:-2px;color:#a78bfa">Void</div><div style="color:#9b97b0;font-size:14px;margin-bottom:32px">Search the web through the void</div><form class="start-search" style="display:flex;width:min(100%,520px);border:1px solid #333;border-radius:28px;overflow:hidden;background:#12121a"><input class="start-query" placeholder="Search or enter URL" autocomplete="off" style="flex:1;min-width:0;height:52px;padding:0 20px;border:0;background:transparent;color:white;font-size:16px"><button style="border:0;padding:0 22px;background:#8b5cf6;color:white;font-weight:600">Search</button></form><div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:28px"><a href="https://www.wikipedia.org/">Wikipedia</a><a href="https://github.com/">GitHub</a><a href="https://www.reddit.com/">Reddit</a><a href="https://www.youtube.com/">YouTube</a></div>';wrap.querySelectorAll('a').forEach(a=>{a.style.color='#a78bfa';a.addEventListener('click',e=>{e.preventDefault();navigate(a.href);});});wrap.querySelector('.start-search').addEventListener('submit',e=>{e.preventDefault();navigate(wrap.querySelector('.start-query').value);});view.appendChild(wrap);}
   function switchTab(id){activeTab=id;const t=getTab();if(!t)return;input.value=t.url||'';if(t.url)loadPage(t.url);else showStartPage();renderTabs();updateNav();}
-  function closeTab(id){
-    if(tabs.length===1){tabs[0]={id:tabs[0].id,title:'New Tab',url:null,history:[],histIndex:-1};showStartPage();input.value='';renderTabs();updateNav();return;}
-    const idx=tabs.findIndex(t=>t.id===id);tabs.splice(idx,1);
-    if(activeTab===id){activeTab=tabs[Math.max(0,idx-1)].id;switchTab(activeTab);}else renderTabs();
-  }
+  function closeTab(id){if(tabs.length===1){tabs[0]={id:tabs[0].id,title:'New Tab',url:null,history:[],histIndex:-1};showStartPage();input.value='';renderTabs();updateNav();return;}const idx=tabs.findIndex(t=>t.id===id);tabs.splice(idx,1);if(activeTab===id){activeTab=tabs[Math.max(0,idx-1)].id;switchTab(activeTab);}else renderTabs();}
   function newTab(){const t={id:nextId++,title:'New Tab',url:null,history:[],histIndex:-1};tabs.push(t);activeTab=t.id;showStartPage();input.value='';renderTabs();updateNav();}
-  function normalizeUrl(raw){
-    const value=(raw||'').trim();
-    if(!value)return null;
-    if(/^https?:\/\//i.test(value)){
-      try{const parsed=new URL(value);return parsed.protocol==='http:'||parsed.protocol==='https:'?parsed.href:null;}catch{return null;}
-    }
-    if(/^(localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(:\d+)?(?:[/?#].*)?$/i.test(value)){
-      try{return new URL('https://'+value).href;}catch{return null;}
-    }
-    return 'https://html.duckduckgo.com/html/?q='+encodeURIComponent(value);
-  }
-  function navigate(raw,push=true){
-    const url=normalizeUrl(raw);if(!url){status.textContent='Enter a valid website address';return;}
-    const t=getTab();if(!t)return;t.url=url;
-    t.title=new URL(url).hostname.split('.').slice(-2).join('.');
-    if(push){t.history.splice(t.histIndex+1);t.history.push(url);t.histIndex=t.history.length-1;}
-    input.value=url;renderTabs();updateNav();loadPage(url);
-  }
+  function normalizeUrl(raw){const value=(raw||'').trim();if(!value)return null;if(/^https?:\/\//i.test(value)){try{const u=new URL(value);return u.protocol==='http:'||u.protocol==='https:'?u.href:null;}catch{return null;}}if(/^(localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})(:\d+)?(?:[/?#].*)?$/i.test(value)){try{return new URL('https://'+value).href;}catch{return null;}}return 'https://html.duckduckgo.com/html/?q='+encodeURIComponent(value);}
+  function navigate(raw,push=true){const url=normalizeUrl(raw);if(!url){status.textContent='Enter a valid website address';return;}const t=getTab();if(!t)return;t.url=url;t.title=new URL(url).hostname.split('.').slice(-2).join('.');if(push){t.history.splice(t.histIndex+1);t.history.push(url);t.histIndex=t.history.length-1;}input.value=url;renderTabs();updateNav();loadPage(url);}
   function switchHistory(delta){const t=getTab();if(!t)return;const next=t.histIndex+delta;if(next<0||next>=t.history.length)return;t.histIndex=next;navigate(t.history[next],false);}
-  async function loadPage(url){
-    if(activeController)activeController.abort();
-    const controller=new AbortController();activeController=controller;const thisRequest=++requestId;
-    const host=new URL(url).hostname.toLowerCase();
-    const readerMode=host==='github.com'||host.endsWith('.github.com')||host==='reddit.com'||host.endsWith('.reddit.com');
-    status.textContent='Loading '+host+'…';iframe.removeAttribute('src');
-    iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#bbb;background:#111">Loading…</body></html>';
-    const target=readerMode?'https://r.jina.ai/'+url:url;
-    const attempts=PROXY_LIST.slice(0,3).map((makeProxy,index)=>(async()=>{
-      const local=new AbortController();const abort=()=>local.abort();controller.signal.addEventListener('abort',abort,{once:true});
-      const timer=setTimeout(()=>local.abort(),readerMode?12000:9000);
-      try{const response=await fetch(makeProxy(target),{mode:'cors',credentials:'omit',signal:local.signal,headers:{'Accept':readerMode?'text/plain,*/*':'text/html,application/xhtml+xml,*/*'}});
-        if(!response.ok)throw Error('Proxy HTTP '+response.status);const contentType=response.headers.get('content-type')||'';const disposition=response.headers.get('content-disposition')||'';if(/attachment/i.test(disposition)||(!readerMode&&!/text\/html|application\/xhtml\+xml|text\/plain/i.test(contentType))){const blob=await response.blob();if(!blob.size)throw Error('Empty download');return {blob,contentType,index,isDownload:true};}const body=await response.text();if(!body||body.length<20)throw Error('Empty response');return {body,index};
-      }finally{clearTimeout(timer);controller.signal.removeEventListener('abort',abort);}
-    })());
-    try{
-      const winner=await Promise.any(attempts);if(thisRequest!==requestId||controller.signal.aborted)return;
-      if(winner.isDownload){const pathName=new URL(url).pathname.split('/').pop()||'download';await saveVoidFile(pathName,winner.blob,url);status.textContent='Downloaded '+pathName+' to Files';iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#ddd;background:#171717"><h2>Download saved</h2><p>'+pathName+' was added to the Files app.</p></body></html>';return;}
-      if(readerMode){
-        const escaped=winner.body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
-        const linked=escaped.replace(/(https?:\/\/[^\s&<>]+)/g,'<a href="$1">$1</a>');
-        iframe.srcdoc='<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;background:#fff;color:#24292f;font:14px/1.65 system-ui;overflow-wrap:anywhere}main{max-width:1050px;margin:auto}a{color:#0969da}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,monospace}</style></head><body><main><h2>'+host+' · readable view</h2><p>Readable page view. Some interactive features are unavailable in this mode.</p><pre>'+linked+'</pre></main><script>document.addEventListener("click",function(e){var a=e.target.closest("a[href]");if(a){e.preventDefault();parent.postMessage({type:"void-navigate",url:a.href},"*");}},true);</script></body></html>';
-        status.textContent='Loaded readable view · proxy '+(winner.index+1);
-      }else{
-        const doc=new DOMParser().parseFromString(winner.body,'text/html');
-        doc.querySelectorAll('meta[http-equiv="Content-Security-Policy"],meta[http-equiv="X-Frame-Options"]').forEach(node=>node.remove());
-        let base=doc.querySelector('base');if(!base){base=doc.createElement('base');doc.head.prepend(base);}base.href=url;
-        const bridge=doc.createElement('script');
-        bridge.textContent="(()=>{const send=url=>parent.postMessage({type:'void-navigate',url:String(url)},'*');const download=(url,name)=>parent.postMessage({type:'void-download',url:String(url),name:name||''},'*');const isFile=url=>/\\.(zip|exe|msi|dmg|pkg|apk|pdf|png|jpe?g|gif|webp|svg|txt|csv|json|docx?|xlsx?|pptx?|mp3|mp4|webm|mov|tar|gz|7z|rar)(?:[?#]|$)/i.test(url);document.addEventListener('click',event=>{const link=event.target.closest&&event.target.closest('a[href]');if(!link)return;const href=link.href;if(!href||/^(javascript:|mailto:|tel:)/i.test(href))return;if(link.hasAttribute('download')||isFile(href)){event.preventDefault();event.stopPropagation();download(href,link.getAttribute('download')||link.textContent.trim());return;}event.preventDefault();event.stopPropagation();send(href);},true);document.addEventListener('submit',event=>{const form=event.target;if(!(form instanceof HTMLFormElement))return;if((form.method||'get').toLowerCase()==='get'){event.preventDefault();const target=new URL(form.action||document.baseURI);new FormData(form).forEach((value,key)=>target.searchParams.append(key,String(value)));send(target.href);}},true);})();";
-        doc.body.appendChild(bridge);iframe.srcdoc='<!DOCTYPE html>\n'+doc.documentElement.outerHTML;status.textContent='Loaded · proxy '+(winner.index+1);
-      }
-    }catch(error){if(controller.signal.aborted||thisRequest!==requestId)return;status.textContent='Could not load: '+(error.message||'all proxies failed');iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#ddd;background:#171717"><h2>Page could not be loaded</h2><p>The browser could not retrieve this page. Try Reload.</p></body></html>';}
-  }
-  form.addEventListener('submit',e=>{e.preventDefault();navigate(input.value);});
-  bindActivation(container.querySelector('.go-btn'),e=>{e.preventDefault();navigate(input.value);});
-  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();navigate(input.value);}});
-  bindActivation(container.querySelector('.new-tab-btn'),newTab);
-  bindActivation(container.querySelector('.back-btn'),()=>switchHistory(-1));
-  bindActivation(container.querySelector('.fwd-btn'),()=>switchHistory(1));
-  bindActivation(container.querySelector('.reload-btn'),()=>{const t=getTab();if(t&&t.url)loadPage(t.url);else showStartPage();});
-  window.addEventListener('message',async e=>{
-    if(e.source!==iframe.contentWindow||!e.data)return;
-    if(e.data.type==='void-navigate')navigate(e.data.url);
-    else if(e.data.type==='void-search')navigate(String(e.data.query||''));
-    else if(e.data.type==='void-download'){
-      const target=String(e.data.url||'');if(!/^https?:\/\//i.test(target))return;
-      status.textContent='Downloading…';let error=null;
-      for(const makeProxy of PROXY_LIST){try{const response=await fetch(makeProxy(target),{credentials:'omit'});if(!response.ok)throw Error('HTTP '+response.status);const blob=await response.blob();if(!blob.size)throw Error('Empty download');const pathName=new URL(target).pathname.split('/').pop()||'download';const name=(e.data.name||pathName).replace(/[\\/:*?"<>|]/g,'_').slice(0,160)||'download';await saveVoidFile(name,blob,target);status.textContent='Saved '+name+' to Files';return;}catch(err){error=err;}}
-      status.textContent='Download failed: '+(error&&error.message||'proxy error');
-    }
-  });
-  renderTabs();showStartPage();updateNav();
+  async function fetchThroughProxy(target,signal,timeoutMs=10000){const attempts=PROXY_LIST.slice(0,3).map((makeProxy,index)=>(async()=>{const local=new AbortController();const abort=()=>local.abort();if(signal)signal.addEventListener('abort',abort,{once:true});const timer=setTimeout(()=>local.abort(),timeoutMs);try{const response=await fetch(makeProxy(target),{mode:'cors',credentials:'omit',signal:local.signal,headers:{'Accept':'text/html,application/xhtml+xml,text/plain,*/*'}});if(!response.ok)throw Error('Proxy HTTP '+response.status);return {response,index};}finally{clearTimeout(timer);if(signal)signal.removeEventListener('abort',abort);}})());return Promise.any(attempts);}
+  async function saveDownload(target,name){status.textContent='Downloading…';let lastError;for(const makeProxy of PROXY_LIST){try{const response=await fetch(makeProxy(target),{credentials:'omit'});if(!response.ok)throw Error('HTTP '+response.status);const blob=await response.blob();if(!blob.size)throw Error('Empty download');const pathName=new URL(target).pathname.split('/').pop()||'download';const safe=(name||pathName).replace(/[\\/:*?"<>|]/g,'_').slice(0,160)||'download';await saveVoidFile(safe,blob,target);status.textContent='Saved '+safe+' to Files';return;}catch(error){lastError=error;}}status.textContent='Download failed: '+(lastError&&lastError.message||'proxy error');}
+  function renderReader(text,host){view.innerHTML='';view.style.cssText='flex:1;min-height:0;overflow:auto;background:#fff;color:#24292f';const main=document.createElement('main');main.style.cssText='max-width:1050px;margin:auto;padding:24px;font:14px/1.65 system-ui;overflow-wrap:anywhere';const heading=document.createElement('h2');heading.textContent=host+' · readable view';const note=document.createElement('p');note.textContent='Proxy text view. Some interactive site features are unavailable.';const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,monospace';pre.textContent=text;pre.querySelectorAll('a').forEach(()=>{});main.append(heading,note,pre);const raw=text;const fragment=document.createDocumentFragment();const urlPattern=/https?:\/\/[^\s<>"')]+/g;let last=0,m;while((m=urlPattern.exec(raw))){fragment.append(document.createTextNode(raw.slice(last,m.index)));const a=document.createElement('a');a.href=m[0];a.textContent=m[0];a.style.color='#0969da';a.addEventListener('click',e=>{e.preventDefault();navigate(a.href);});fragment.append(a);last=m.index+m[0].length;}fragment.append(document.createTextNode(raw.slice(last)));pre.textContent='';pre.append(fragment);view.appendChild(main);}
+  async function loadPage(url){if(activeController)activeController.abort();const controller=new AbortController();activeController=controller;const thisRequest=++requestId;const host=new URL(url).hostname.toLowerCase();const readerMode=host==='github.com'||host.endsWith('.github.com')||host==='reddit.com'||host.endsWith('.reddit.com');status.textContent='Loading '+host+'…';view.innerHTML='<div style="padding:24px;font:14px system-ui;color:#777">Loading through proxy…</div>';view.style.cssText='flex:1;min-height:0;overflow:auto;background:#fff;color:#222';const target=readerMode?'https://r.jina.ai/'+url:url;try{const winner=await fetchThroughProxy(target,controller.signal,readerMode?14000:10000);if(thisRequest!==requestId||controller.signal.aborted)return;const response=winner.response;const disposition=response.headers.get('content-disposition')||'';const type=response.headers.get('content-type')||'';if(/attachment/i.test(disposition)||(!readerMode&&!/text\/html|application\/xhtml\+xml|text\/plain/i.test(type))){const blob=await response.blob();const name=new URL(url).pathname.split('/').pop()||'download';await saveVoidFile(name,blob,url);status.textContent='Downloaded '+name+' to Files';view.textContent=name+' was saved to the Files app.';return;}const body=await response.text();if(!body||body.length<10)throw Error('Empty response');if(readerMode){renderReader(body,host);status.textContent='Loaded readable view · proxy '+(winner.index+1);return;}renderProxiedDocument(body,url,winner.index);status.textContent='Loaded · proxy '+(winner.index+1);}catch(error){if(controller.signal.aborted||thisRequest!==requestId)return;status.textContent='Could not load: '+(error.message||'all proxies failed');view.innerHTML='<div style="padding:24px;font:14px system-ui;color:#ddd;background:#171717"><h2>Page could not be loaded</h2><p>The proxy could not retrieve this page. Try Reload.</p></div>';}}
+  function renderProxiedDocument(source,url,proxyIndex){const parsed=new DOMParser().parseFromString(source,'text/html');parsed.querySelectorAll('script,iframe,frame,frameset,object,embed,portal,meta[http-equiv="Content-Security-Policy"],meta[http-equiv="refresh"]').forEach(n=>n.remove());parsed.querySelectorAll('*').forEach(el=>{Array.from(el.attributes).forEach(attr=>{const name=attr.name.toLowerCase();if(name.startsWith('on')||name==='srcdoc'||name==='nonce')el.removeAttribute(attr.name);});});parsed.querySelectorAll('base,link[rel="stylesheet"],link[rel="preload"],link[rel="modulepreload"]').forEach(n=>n.remove());parsed.querySelectorAll('a[href]').forEach(a=>{try{a.href=new URL(a.getAttribute('href'),url).href;a.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const href=a.href;if(a.hasAttribute('download')||/\.(zip|exe|msi|dmg|pkg|apk|pdf|png|jpe?g|gif|webp|svg|txt|csv|json|docx?|xlsx?|pptx?|mp3|mp4|webm|mov|tar|gz|7z|rar)(?:[?#]|$)/i.test(href)){saveDownload(href,a.getAttribute('download')||a.textContent.trim());}else navigate(href);});}catch{a.removeAttribute('href');}});parsed.querySelectorAll('img[src],source[src]').forEach(el=>{try{const absolute=new URL(el.getAttribute('src'),url).href;el.setAttribute('src',PROXY_LIST[proxyIndex](absolute));}catch{el.removeAttribute('src');}});parsed.querySelectorAll('form').forEach(formEl=>{formEl.addEventListener('submit',e=>{e.preventDefault();const method=(formEl.getAttribute('method')||'get').toLowerCase();if(method!=='get'){status.textContent='Only GET forms are supported in proxy mode';return;}const target=new URL(formEl.getAttribute('action')||url,url);new FormData(formEl).forEach((v,k)=>target.searchParams.append(k,String(v)));navigate(target.href);});});parsed.querySelectorAll('a[download]').forEach(a=>a.setAttribute('download',a.getAttribute('download')||'download'));view.innerHTML='';view.style.cssText='flex:1;min-height:0;overflow:auto;background:#fff;color:#222';const shell=document.createElement('div');shell.style.cssText='min-height:100%;font:14px/1.5 Arial,sans-serif;color:#222;background:#fff;overflow-wrap:anywhere';const content=parsed.body||parsed.documentElement;Array.from(content.childNodes).forEach(node=>shell.appendChild(document.importNode(node,true)));view.appendChild(shell);shell.querySelectorAll('a[href]').forEach(a=>{a.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const href=a.href;if(a.hasAttribute('download')||/\.(zip|exe|msi|dmg|pkg|apk|pdf|png|jpe?g|gif|webp|svg|txt|csv|json|docx?|xlsx?|pptx?|mp3|mp4|webm|mov|tar|gz|7z|rar)(?:[?#]|$)/i.test(href))saveDownload(href,a.getAttribute('download')||a.textContent.trim());else navigate(href);});});shell.querySelectorAll('form').forEach(formEl=>formEl.addEventListener('submit',e=>{e.preventDefault();if((formEl.method||'get').toLowerCase()!=='get'){status.textContent='Only GET forms are supported in proxy mode';return;}const target=new URL(formEl.getAttribute('action')||url,url);new FormData(formEl).forEach((v,k)=>target.searchParams.append(k,String(v)));navigate(target.href);}));}
+  form.addEventListener('submit',e=>{e.preventDefault();navigate(input.value);});bindActivation(container.querySelector('.go-btn'),e=>{e.preventDefault();navigate(input.value);});input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();navigate(input.value);}});bindActivation(container.querySelector('.new-tab-btn'),newTab);bindActivation(container.querySelector('.back-btn'),()=>switchHistory(-1));bindActivation(container.querySelector('.fwd-btn'),()=>switchHistory(1));bindActivation(container.querySelector('.reload-btn'),()=>{const t=getTab();if(t&&t.url)loadPage(t.url);else showStartPage();});renderTabs();showStartPage();updateNav();
 }
 
 /* ===== VoidCode ===== */
@@ -569,7 +439,7 @@ function createSettings(container){
 }
 
 function createAbout(container){
-  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><h2>About Void</h2><p>A complete desktop environment in your browser.</p><section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)"><h3 style="margin:0 0 10px">What\'s new in this update</h3><ul style="padding-left:20px;margin:0;line-height:1.7"><li><strong>Faster loading:</strong> browser requests race multiple proxy services with time limits.</li><li><strong>GitHub and Reddit:</strong> readable page mode displays site content when full interactive pages cannot run in the embedded browser.</li><li><strong>Automatic downloads:</strong> supported download links and file responses are saved into Files.</li><li><strong>Files:</strong> downloads are stored in browser storage, the list refreshes automatically, and files can be saved to the device or deleted.</li></ul></section><p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p><p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p></div>';
+  container.innerHTML='<div class="app-content" style="height:100%;overflow:auto"><h2>About Void</h2><p>A complete desktop environment in your browser.</p><section style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface,transparent)"><h3 style="margin:0 0 10px">What\'s new in this update</h3><ul style="padding-left:20px;margin:0;line-height:1.7"><li><strong>Faster loading:</strong> browser requests race multiple proxy services with time limits.</li><li><strong>Proxy-only browser:</strong> pages are fetched through the proxy and rendered directly in Void OS; no iframe is used.</li><li><strong>Safer page rendering:</strong> remote scripts and embedded frames are blocked while links and supported GET forms stay routed through the proxy.</li><li><strong>GitHub and Reddit:</strong> readable proxy text mode displays site content when full interactive pages cannot be rendered.</li><li><strong>Automatic downloads:</strong> supported download links and file responses are saved into Files.</li><li><strong>Files:</strong> downloads are stored in browser storage, the list refreshes automatically, and files can be saved to the device or deleted.</li></ul></section><p style="font-size:12px;color:var(--text-dim);margin-top:16px">Void OS · Latest update</p><p style="font-size:12px;color:var(--text-dim)">github.com/Tvmanisback/Void</p></div>';
 }
 
 window.VoidOS={openApp,APPS};
