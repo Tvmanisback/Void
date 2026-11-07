@@ -41,9 +41,8 @@ app.use(express.json({ limit: "16kb" }));
 app.use("/api", rateLimit({ windowMs: 60_000, limit: 45, standardHeaders: "draft-8", legacyHeaders: false }));
 
 const template = Sandbox.template()
-  .withPackages("python3", "python3-pip", "lua5.4")
-  .workdir("/app")
-  .run("ln -sf /usr/bin/python3 /usr/local/bin/python");
+  .withPackages("python3", "lua5.4")
+  .workdir("/app");
 
 const queues = new Map();
 async function forUser(userId, task) {
