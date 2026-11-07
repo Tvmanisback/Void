@@ -49,41 +49,20 @@
   <div id="desktop" class="hidden">
     <div id="desktop-icons"></div>
     <div id="windows-container"></div>
-
     <div id="start-menu" class="hidden">
-      <div class="start-header">
-        <div class="start-user">
-          <div class="avatar">V</div>
-          <div>
-            <div class="start-name">Void User</div>
-            <div class="start-sub">Void OS</div>
-          </div>
-        </div>
-      </div>
+      <div class="start-header"><div class="start-user"><div class="avatar">V</div><div><div class="start-name">Void User</div><div class="start-sub">Void OS</div></div></div></div>
       <div class="start-apps" id="start-apps"></div>
-      <div class="start-footer">
-        <button id="power-btn" title="Reset session">⏻</button>
-      </div>
+      <div class="start-footer"><button id="power-btn" title="Reset session">⏻</button></div>
     </div>
-
     <div id="taskbar">
-      <button id="start-btn" title="Start">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
-          <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
-        </svg>
-      </button>
-      <div id="taskbar-apps"></div>
-      <div id="taskbar-right">
-        <div id="clock"></div>
-      </div>
+      <button id="start-btn" title="Start"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></button>
+      <div id="taskbar-apps"></div><div id="taskbar-right"><div id="clock"></div></div>
     </div>
   </div>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
   <script src="auth.js"></script>
-  <script src="runtime-config.js"></script>
+  <script src="runtime-config.js?v=2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
   <script src="app.js"></script>
 </body>
