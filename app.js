@@ -417,7 +417,7 @@ function createBrowser(container){
     <div class="browser-tabs" id="browser-tabs"></div>
     <div class="browser-toolbar">
       <button class="back-btn" type="button" title="Back">←</button><button class="fwd-btn" type="button" title="Forward">→</button><button class="reload-btn" type="button" title="Reload">↻</button>
-      <form class="url-form" style="flex:1;display:flex;gap:6px"><input class="url-input" type="text" placeholder="Search or enter URL" spellcheck="false" autocomplete="off"/><button type="submit" class="go-btn">Go</button></form>
+      <form class="url-form" style="flex:1;display:flex;gap:6px"><input class="url-input" type="text" placeholder="Search or enter URL" spellcheck="false" autocomplete="off"/><button type="button" class="go-btn">Go</button></form>
       <button class="new-tab-btn" type="button" title="New Tab">+</button>
     </div>
     <div style="flex:1;position:relative;min-height:0"><iframe class="browser-frame" title="Web page" sandbox="allow-scripts allow-forms allow-popups allow-modals" referrerpolicy="no-referrer" style="width:100%;height:100%;border:0;background:#fff"></iframe></div>
