@@ -397,8 +397,11 @@ document.getElementById('s').onsubmit=function(e){
   e.preventDefault();
   var q=document.getElementById('q').value.trim();
   if(!q) return;
-  var url = /^https?:\/\//i.test(q) ? q : (q.includes('.') && !q.includes(' ') ? 'https://'+q : 'https://duckduckgo.com/?q='+encodeURIComponent(q));
-  parent.postMessage({type:'void-navigate',url:url},'*');
+  if(/^https?:\\/\\//i.test(q) || /^(localhost|(?:[a-z0-9-]+\\.)+[a-z]{2,})(:\\d+)?(?:[/?#].*)?$/i.test(q)){
+    parent.postMessage({type:'void-navigate',url:/^https?:\\/\\//i.test(q)?q:'https://'+q},'*');
+  }else{
+    parent.postMessage({type:'void-search',query:q},'*');
+  }
 };
 document.querySelectorAll('[data-url]').forEach(function(a){
   a.onclick=function(e){ e.preventDefault(); parent.postMessage({type:'void-navigate',url:a.dataset.url},'*'); };
@@ -444,12 +447,15 @@ function createBrowser(container){
   }
   function newTab(){const t={id:nextId++,title:'New Tab',url:null,history:[],histIndex:-1};tabs.push(t);activeTab=t.id;showStartPage();input.value='';renderTabs();updateNav();}
   function normalizeUrl(raw){
-    let value=(raw||'').trim();if(!value)return null;
-    if(value.slice(0,8).toLowerCase()!=='https://'&&value.slice(0,7).toLowerCase()!=='http://'){
-      if(value.includes('.')&&!value.includes(' '))value='https://'+value;
-      else value='https://duckduckgo.com/?q='+encodeURIComponent(value);
+    const value=(raw||'').trim();
+    if(!value)return null;
+    if(/^https?:\\/\\//i.test(value)){
+      try{const parsed=new URL(value);return parsed.protocol==='http:'||parsed.protocol==='https:'?parsed.href:null;}catch{return null;}
     }
-    try{const parsed=new URL(value);if(parsed.protocol!=='http:'&&parsed.protocol!=='https:')return null;return parsed.href;}catch{return null;}
+    if(/^(localhost|(?:[a-z0-9-]+\\.)+[a-z]{2,})(:\\d+)?(?:[/?#].*)?$/i.test(value)){
+      try{return new URL('https://'+value).href;}catch{return null;}
+    }
+    return 'https://duckduckgo.com/?q='+encodeURIComponent(value);
   }
   function navigate(raw,push=true){
     const url=normalizeUrl(raw);if(!url){status.textContent='Enter a valid website address';return;}
@@ -501,11 +507,17 @@ function createBrowser(container){
     iframe.srcdoc='<html><body style="font:14px system-ui;padding:24px;color:#333"><h2>Page could not be loaded</h2><p>The CORS proxies could not retrieve this website. Try another address or reload.</p></body></html>';
   }
   form.addEventListener('submit',e=>{e.preventDefault();navigate(input.value);});
+  bindActivation(container.querySelector('.go-btn'),e=>{e.preventDefault();navigate(input.value);});
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();navigate(input.value);}});
   bindActivation(container.querySelector('.new-tab-btn'),newTab);
   bindActivation(container.querySelector('.back-btn'),()=>switchHistory(-1));
   bindActivation(container.querySelector('.fwd-btn'),()=>switchHistory(1));
   bindActivation(container.querySelector('.reload-btn'),()=>{const t=getTab();if(t&&t.url)loadPage(t.url);else showStartPage();});
-  window.addEventListener('message',e=>{if(e.source===iframe.contentWindow&&e.data&&e.data.type==='void-navigate')navigate(e.data.url);});
+  window.addEventListener('message',e=>{
+    if(e.source!==iframe.contentWindow||!e.data)return;
+    if(e.data.type==='void-navigate')navigate(e.data.url);
+    else if(e.data.type==='void-search')navigate(String(e.data.query||''));
+  });
   renderTabs();showStartPage();updateNav();
 }
 
