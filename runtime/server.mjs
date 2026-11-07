@@ -24,6 +24,7 @@ const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVIC
 });
 
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
