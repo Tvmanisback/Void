@@ -120,5 +120,13 @@
     }
   }
 
-  window.VoidAuth = { init, signOut };
+  async function getAccessToken() {
+    const supabase = getClient();
+    if (!supabase) return null;
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data?.session?.access_token || null;
+  }
+
+  window.VoidAuth = { init, signOut, getAccessToken };
 })();
