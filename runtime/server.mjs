@@ -3,6 +3,8 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { createClient } from "@supabase/supabase-js";
 import { Sandbox } from "railway";
+import chromium from "@sparticuz/chromium";
+import { chromium as playwrightChromium } from "playwright-core";
 
 const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RAILWAY_API_TOKEN", "RAILWAY_ENVIRONMENT_ID"];
 for (const key of required) {
@@ -93,6 +95,179 @@ async function getUserSandbox(userId) {
 
   return sandbox;
 }
+
+
+const browserSessions = new Map();
+const BROWSER_IDLE_MS = 10 * 60 * 1000;
+const browserLocks = new Map();
+
+function validBrowserUrl(value) {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  if (!["http:", "https:"].includes(url.protocol)) return null;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+      host === "0.0.0.0" || host === "::" || host === "::1" ||
+      /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) ||
+      host === "metadata.google.internal" || host === "169.254.169.254") return null;
+  return url.href;
+}
+
+async function withBrowserLock(userId, task) {
+  const previous = browserLocks.get(userId) || Promise.resolve();
+  const current = previous.catch(() => {}).then(task);
+  browserLocks.set(userId, current);
+  try { return await current; }
+  finally { if (browserLocks.get(userId) === current) browserLocks.delete(userId); }
+}
+
+async function getBrowserSession(userId) {
+  let session = browserSessions.get(userId);
+  if (session?.browser?.isConnected() && !session.page.isClosed()) {
+    session.lastUsed = Date.now();
+    return session;
+  }
+  if (session) browserSessions.delete(userId);
+  const executablePath = await chromium.executablePath();
+  const browser = await playwrightChromium.launch({
+    args: chromium.args,
+    executablePath,
+    headless: true,
+    defaultViewport: { width: 1365, height: 850 }
+  });
+  const context = await browser.newContext({
+    viewport: { width: 1365, height: 850 },
+    deviceScaleFactor: 1,
+    ignoreHTTPSErrors: false
+  });
+  const page = await context.newPage();
+  await page.route("**/*", async route => {
+    const requestUrl = route.request().url();
+    if (requestUrl.startsWith("data:") || requestUrl.startsWith("blob:") || requestUrl.startsWith("about:")) return route.continue();
+    const safe = validBrowserUrl(requestUrl);
+    if (!safe) return route.abort("blockedbyclient");
+    return route.continue();
+  });
+  session = { browser, context, page, lastUsed: Date.now() };
+  browserSessions.set(userId, session);
+  browser.on("disconnected", () => {
+    if (browserSessions.get(userId) === session) browserSessions.delete(userId);
+  });
+  return session;
+}
+
+async function browserNavigate(session, url) {
+  const safeUrl = validBrowserUrl(url);
+  if (!safeUrl) throw new Error("Enter a public HTTP or HTTPS website address.");
+  try {
+    await session.page.goto(safeUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+  } catch (error) {
+    if (!/timeout/i.test(error.message || "")) throw error;
+  }
+  session.lastUsed = Date.now();
+  return { url: session.page.url(), title: await session.page.title().catch(() => "Browser") };
+}
+
+app.post("/api/browser/open", authenticate, async (req, res) => {
+  const url = validBrowserUrl(req.body?.url);
+  if (!url) return res.status(400).json({ error: "Enter a public HTTP or HTTPS website address." });
+  try {
+    const result = await withBrowserLock(req.voidUser.id, async () => {
+      const session = await getBrowserSession(req.voidUser.id);
+      return browserNavigate(session, url);
+    });
+    res.json({ ok: true, ...result, width: 1365, height: 850 });
+  } catch (error) {
+    console.error("Void browser launch/navigation failed:", error);
+    res.status(503).json({ error: error.message || "The hosted browser could not start." });
+  }
+});
+
+app.post("/api/browser/navigate", authenticate, async (req, res) => {
+  const url = validBrowserUrl(req.body?.url);
+  if (!url) return res.status(400).json({ error: "Enter a public HTTP or HTTPS website address." });
+  try {
+    const result = await withBrowserLock(req.voidUser.id, async () => {
+      const session = await getBrowserSession(req.voidUser.id);
+      return browserNavigate(session, url);
+    });
+    res.json({ ok: true, ...result, width: 1365, height: 850 });
+  } catch (error) {
+    res.status(503).json({ error: error.message || "Navigation failed." });
+  }
+});
+
+app.get("/api/browser/screenshot", authenticate, async (req, res) => {
+  const session = browserSessions.get(req.voidUser.id);
+  if (!session || !session.browser.isConnected() || session.page.isClosed()) {
+    return res.status(404).json({ error: "No active browser session. Open a website first." });
+  }
+  try {
+    session.lastUsed = Date.now();
+    const image = await session.page.screenshot({ type: "jpeg", quality: 68, fullPage: false, animations: "disabled" });
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("X-Void-Page-Width", "1365");
+    res.setHeader("X-Void-Page-Height", "850");
+    res.send(image);
+  } catch (error) {
+    res.status(503).json({ error: "Could not capture the browser screen." });
+  }
+});
+
+app.post("/api/browser/input", authenticate, async (req, res) => {
+  const session = browserSessions.get(req.voidUser.id);
+  if (!session || !session.browser.isConnected() || session.page.isClosed()) {
+    return res.status(404).json({ error: "Open a website before interacting with it." });
+  }
+  const body = req.body || {};
+  try {
+    await withBrowserLock(req.voidUser.id, async () => {
+      const page = session.page;
+      if (body.type === "click" && Number.isFinite(body.x) && Number.isFinite(body.y)) {
+        await page.mouse.click(Math.max(0, Math.min(1365, body.x)), Math.max(0, Math.min(850, body.y)), { button: body.button === "right" ? "right" : "left" });
+      } else if (body.type === "scroll") {
+        await page.mouse.wheel(Number(body.deltaX) || 0, Math.max(-1200, Math.min(1200, Number(body.deltaY) || 0)));
+      } else if (body.type === "key" && typeof body.key === "string" && body.key.length <= 32) {
+        await page.keyboard.press(body.key);
+      } else if (body.type === "text" && typeof body.text === "string" && body.text.length <= 4000) {
+        await page.keyboard.insertText(body.text);
+      } else if (body.type === "back") {
+        await page.goBack({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+      } else if (body.type === "forward") {
+        await page.goForward({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+      } else if (body.type === "reload") {
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+      } else {
+        throw new Error("Unsupported browser input.");
+      }
+      session.lastUsed = Date.now();
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Browser input failed." });
+  }
+});
+
+app.post("/api/browser/close", authenticate, async (req, res) => {
+  const session = browserSessions.get(req.voidUser.id);
+  if (session) {
+    browserSessions.delete(req.voidUser.id);
+    await session.browser.close().catch(() => {});
+  }
+  res.json({ ok: true });
+});
+
+setInterval(() => {
+  const cutoff = Date.now() - BROWSER_IDLE_MS;
+  for (const [userId, session] of browserSessions) {
+    if (session.lastUsed < cutoff) {
+      browserSessions.delete(userId);
+      session.browser.close().catch(() => {});
+    }
+  }
+}, 60_000).unref();
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "void-runtime" }));
 
